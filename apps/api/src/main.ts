@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { ENV } from './config/config.module.js';
@@ -14,10 +15,18 @@ async function bootstrap(): Promise<void> {
   });
   const env = app.get<Env>(ENV);
 
-  // A API só é alcançada pelo frontend via rede interna do Docker (proxy reverso).
+  // O navegador fala com o frontend, que repassa /api/* para cá pela rede interna do Docker.
+  app.setGlobalPrefix('api');
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
-  app.use(helmet());
+  app.use(
+    helmet({
+      // A API só devolve JSON: nada pode ser renderizado, embutido ou executado.
+      contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+      crossOriginResourcePolicy: { policy: 'same-origin' },
+    }),
+  );
+  app.use(cookieParser());
   app.useBodyParser('json', { limit: '100kb' });
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
   app.enableShutdownHooks();

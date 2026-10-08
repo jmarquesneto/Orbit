@@ -1,10 +1,33 @@
-import { Module } from '@nestjs/common';
+import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from './config/config.module.js';
 import { RedisModule } from './infrastructure/cache/redis.module.js';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
+import { PlatformModule } from './infrastructure/platform/platform.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { InvitationsModule } from './modules/invitations/invitations.module.js';
+import { SettingsModule } from './modules/settings/settings.module.js';
+import { DomainExceptionFilter } from './shared/presentation/domain-exception.filter.js';
+import { OriginCheckMiddleware } from './shared/presentation/origin-check.middleware.js';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, RedisModule, HealthModule],
+  imports: [
+    ConfigModule,
+    DatabaseModule,
+    RedisModule,
+    PlatformModule,
+    AuditModule,
+    HealthModule,
+    AuthModule,
+    SettingsModule,
+    InvitationsModule,
+  ],
+  providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(OriginCheckMiddleware).forRoutes('*path');
+  }
+}

@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
   poweredByHeader: false,
   reactStrictMode: true,
+  // O navegador só conversa com o frontend (mesma origem → cookies SameSite=Strict funcionam).
+  // /api/* é repassado à API pela rede interna, com X-Forwarded-For para o rate limit.
+  async rewrites() {
+    const api = (process.env.API_INTERNAL_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
+    return [{ source: '/api/:path*', destination: `${api}/api/:path*` }];
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

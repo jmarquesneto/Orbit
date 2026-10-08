@@ -9,6 +9,8 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': 'error',
+      // Falso positivo com valores usados só em decorators de parâmetro (@Param(..., pipe)).
+      'no-useless-assignment': 'off',
     },
   },
 );

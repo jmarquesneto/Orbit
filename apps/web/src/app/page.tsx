@@ -6,7 +6,7 @@ type Readiness = { status: string; dependencies?: Record<string, string> };
 
 async function fetchReadiness(): Promise<Readiness> {
   try {
-    const res = await fetch(`${apiInternalUrl()}/health/ready`, { cache: 'no-store' });
+    const res = await fetch(`${apiInternalUrl()}/api/health/ready`, { cache: 'no-store' });
     return (await res.json()) as Readiness;
   } catch {
     return { status: 'unreachable' };

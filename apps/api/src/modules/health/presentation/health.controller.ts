@@ -1,7 +1,9 @@
 import { Controller, Get, HttpCode, ServiceUnavailableException } from '@nestjs/common';
 import { CheckReadinessUseCase } from '../application/check-readiness.use-case.js';
 import type { ReadinessReport } from '../domain/dependency-probe.js';
+import { Public } from '../../auth/presentation/decorators.js';
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly checkReadiness: CheckReadinessUseCase) {}

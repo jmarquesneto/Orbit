@@ -1,6 +1,6 @@
 # Topologia de rede (menor exposição possível):
 #
-#   host ──► web ──(backend)──► api ──(data)──► db
+#   host ──► web ──(backend)──► api ──(data)──► db ◄── migrate (one-shot, DDL)
 #                                          └──► redis
 #
 #   - edge:    única rede com saída; só o "web" publica porta no host.
@@ -75,10 +75,37 @@ services:
       - backend
       - data
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Aplica as migrações com o papel dono do schema e encerra. A API (que só tem DML)
+  # sobe apenas depois que este serviço termina com sucesso.
+  migrate:
+    <<: *hardening
+    restart: "no"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-finance}-api:local
+    command: ["node", "dist/infrastructure/database/migrate.js"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?defina DB_NAME no .env}
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:?defina DB_MIGRATOR_USER no .env}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?defina DB_MIGRATOR_PASSWORD no .env}
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
     read_only: true
     tmpfs:
       - /tmp

@@ -21,6 +21,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 # ---------- build: saída "standalone" do Next.js ----------
 FROM deps AS build
+# Destino do proxy /api/* (rede interna do Docker). Entra no build porque o Next.js
+# grava as regras de rewrite na saída standalone.
+ARG API_INTERNAL_URL=http://api:4000
+ENV API_INTERNAL_URL=${API_INTERNAL_URL}
 COPY apps/web apps/web
 RUN pnpm --filter @app/web build
 
