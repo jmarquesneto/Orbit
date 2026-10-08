@@ -31,7 +31,7 @@ export class FixedClock implements Clock {
 }
 
 /** Sem rollback: suficiente para testar regras; a atomicidade real é do Postgres. */
-export const passthroughTx: TransactionRunner = { run: (fn) => fn() };
+export const passthroughTx: TransactionRunner = { run: (fn) => fn(), runAs: (_user, fn) => fn() };
 
 export class RecordingAuditLog implements AuditLog {
   readonly entries: AuditEntry[] = [];

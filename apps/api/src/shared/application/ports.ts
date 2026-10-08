@@ -11,6 +11,11 @@ export const CLOCK = Symbol('CLOCK');
 /** Executa o callback numa transação SQL. Chamadas aninhadas reutilizam a transação aberta. */
 export interface TransactionRunner {
   run<T>(fn: () => Promise<T>): Promise<T>;
+  /**
+   * Transação "em nome de" um usuário: ativa o Row-Level Security do Postgres para ele.
+   * Todo acesso a dados financeiros passa por aqui.
+   */
+  runAs<T>(userId: string, fn: () => Promise<T>): Promise<T>;
 }
 export const TRANSACTION_RUNNER = Symbol('TRANSACTION_RUNNER');
 

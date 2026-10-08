@@ -1,0 +1,32 @@
+# Banco e Redis descartáveis para os testes de integração da API.
+# Senhas fixas de TESTE: só escutam em 127.0.0.1 e os dados ficam em memória (tmpfs).
+#
+#   docker compose -p finance-test -f docker-compose.test.yml up -d
+#   pnpm --filter @app/api test:int
+#   docker compose -p finance-test -f docker-compose.test.yml down
+#
+# Use sempre "-p finance-test": o .env da raiz define COMPOSE_PROJECT_NAME para a stack
+# principal, e sem o -p os dois ambientes dividiriam o mesmo nome de projeto.
+
+services:
+  test-db:
+    build:
+      context: infra/db
+    environment:
+      POSTGRES_DB: finance_test
+      POSTGRES_USER: test_admin
+      POSTGRES_PASSWORD: test-superuser-password-not-a-secret-0000000
+      DB_MIGRATOR_USER: test_migrator
+      DB_MIGRATOR_PASSWORD: test-migrator-password-not-a-secret-00000000
+      DB_APP_USER: test_runtime
+      DB_APP_PASSWORD: test-runtime-password-not-a-secret-000000000
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  test-redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--requirepass", "test-redis-password-not-a-secret-0000000000000"]
+    ports:
+      - "127.0.0.1:56379:6379"

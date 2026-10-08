@@ -83,6 +83,17 @@ pnpm install
 pnpm -r typecheck && pnpm -r lint && pnpm -r test
 ```
 
+### Testes de integração (Postgres e Redis reais)
+
+Sobem a API inteira contra um banco descartável e conferem, entre outras coisas, o
+parcelamento nas faturas, o compartilhamento e o Row-Level Security do próprio Postgres.
+
+```sh
+docker compose -p finance-test -f docker-compose.test.yml up -d
+pnpm --filter @app/api test:int
+docker compose -p finance-test -f docker-compose.test.yml down
+```
+
 ## Segurança da aplicação
 
 | Tema | Como é feito |
@@ -118,3 +129,38 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 | `GET /api/admin/users` | admin | lista os usuários |
 | `PATCH /api/admin/users/:id/status` | admin | `{ status: "active" \| "locked" }` |
 | `GET /api/health/live` · `/ready` | público | saúde da API |
+
+## API (Bloco 3, motor financeiro)
+
+Todas as rotas exigem login. Valores sempre em **centavos inteiros** (R$ 12,34 → `1234`) e
+datas no formato `AAAA-MM-DD`.
+
+| Método e rota | O que faz |
+| --- | --- |
+| `POST /api/budgets` · `GET /api/budgets` | cria / lista orçamentos (os seus e os compartilhados com você) |
+| `GET · PATCH · DELETE /api/budgets/:id` | detalhe / edita / arquiva (arquivar é só do dono) |
+| `GET /api/budgets/:id/summary?month=2026-10` | planejado x realizado por categoria no mês |
+| `POST · GET /api/budgets/:id/categories` | categorias (receita/despesa, com valor planejado e subcategorias) |
+| `PATCH · DELETE /api/budgets/:id/categories/:cid` | edita / exclui categoria |
+| `POST · GET /api/budgets/:id/transactions` | lançamentos de conta ou dinheiro (`?month=` filtra) |
+| `PATCH /api/budgets/:id/transactions/:tid` | edita (com `version`, lock otimista) |
+| `POST /api/budgets/:id/transactions/:tid/payment` | `{ paid, version }` marca ou desmarca o pagamento (mexe no saldo) |
+| `POST · GET /api/wallets` | carteiras: `checking`, `cash` ou `credit` (com limite e dias de fechamento e vencimento) |
+| `POST /api/wallets/:id/purchases` | compra no cartão em X parcelas → X lançamentos nas faturas dos meses seguintes |
+| `DELETE /api/wallets/:id/purchases/:planId` | cancela a compra parcelada inteira |
+| `GET /api/wallets/:id/invoices[/2026-11]` | faturas do cartão / uma fatura com as parcelas |
+| `POST /api/wallets/:id/invoices/2026-11/payment` | paga a fatura a partir de uma conta |
+| `POST · GET /api/goals` · `POST /api/goals/:id/movements` | caixinhas: depósito e resgate a partir de uma carteira |
+| `POST /api/shares` · `GET /api/shares` · `DELETE /api/shares/:id` | compartilha orçamento ou caixinha por e-mail, com papel `read`, `edit` ou `create` |
+
+### Regras do motor financeiro
+
+- **Parcelamento:** uma compra no dia em que o cartão fecha (ou depois) já vai para a próxima fatura.
+  Os centavos que sobram ficam nas primeiras parcelas, então a soma sempre fecha. Tudo acontece numa
+  única transação SQL, e a `idempotencyKey` impede duplicar a compra num clique duplo.
+- **Permissões:** em toda requisição, o usuário é comparado com o dono e com `resource_shares`.
+  Quem não tem acesso recebe 404 (nem descobre que o recurso existe); quem vê mas não pode
+  alterar recebe 403. Só o dono compartilha, exclui e arquiva.
+- **Row-Level Security:** o Postgres repete as mesmas regras. Cada transação define
+  `app.user_id`, e sem ele nenhuma linha financeira é visível, nem por SQL direto.
+- **Carteiras são pessoais:** num orçamento compartilhado, cada pessoa lança e paga com a própria carteira.

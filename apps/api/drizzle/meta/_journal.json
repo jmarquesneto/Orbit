@@ -15,6 +15,20 @@
       "when": 1791476652045,
       "tag": "0001_hardening_and_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791479086510,
+      "tag": "0002_finance_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791479093165,
+      "tag": "0003_row_level_security",
+      "breakpoints": true
     }
   ]
 }

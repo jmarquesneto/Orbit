@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Inject, Injectable } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { TransactionRunner } from '../../shared/application/ports.js';
 import type * as schema from './schema.js';
@@ -31,5 +32,13 @@ export class DbContext implements TransactionRunner {
   run<T>(fn: () => Promise<T>): Promise<T> {
     if (this.inTransaction) return fn();
     return this.root.transaction((tx) => this.current.run(tx, fn));
+  }
+
+  /** `set_config(..., true)` vale só até o fim da transação: nada vaza para a próxima requisição. */
+  runAs<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    return this.run(async () => {
+      await this.db.execute(sql`SELECT set_config('app.user_id', ${userId}, true)`);
+      return fn();
+    });
   }
 }
