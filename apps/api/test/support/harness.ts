@@ -1,3 +1,4 @@
+import { MfaService } from '../../src/modules/auth/application/mfa.service.js';
 import { LoginUseCase } from '../../src/modules/auth/application/login.use-case.js';
 import { SessionService } from '../../src/modules/auth/application/session.service.js';
 import { UsersAdminService } from '../../src/modules/auth/application/users-admin.service.js';
@@ -5,14 +6,18 @@ import { InvitationsService } from '../../src/modules/invitations/application/in
 import { SettingsService } from '../../src/modules/settings/application/settings.service.js';
 import {
   CountingRateLimiter,
+  fakeCipher,
   fakeHasher,
+  fakeQr,
   fakeTokens,
   FixedClock,
   InMemoryInvitations,
+  InMemoryRecoveryCodes,
   InMemorySessions,
   InMemorySettings,
   InMemoryUsers,
   MemoryBrandingCache,
+  MemoryEphemeralStore,
   passthroughTx,
   RecordingAuditLog,
 } from './fakes.js';
@@ -27,6 +32,8 @@ export function buildHarness() {
   const brandingCache = new MemoryBrandingCache();
   const audit = new RecordingAuditLog();
   const limiter = new CountingRateLimiter();
+  const recoveryRepo = new InMemoryRecoveryCodes();
+  const store = new MemoryEphemeralStore();
   const config = { accessTtlSeconds: 900, refreshTtlSeconds: 604_800 };
 
   const sessions = new SessionService(
@@ -38,9 +45,23 @@ export function buildHarness() {
     passthroughTx,
     clock,
   );
-  const login = new LoginUseCase(users, fakeHasher, limiter, audit, passthroughTx, clock, sessions);
-  const usersAdmin = new UsersAdminService(users, sessionsRepo, fakeHasher, audit, passthroughTx, clock);
   const settings = new SettingsService(settingsRepo, brandingCache, audit, passthroughTx, clock);
+  const mfa = new MfaService(
+    users,
+    sessionsRepo,
+    recoveryRepo,
+    fakeCipher,
+    fakeQr,
+    store,
+    limiter,
+    audit,
+    passthroughTx,
+    clock,
+    sessions,
+    settings,
+  );
+  const login = new LoginUseCase(users, fakeHasher, limiter, audit, passthroughTx, clock, sessions, mfa);
+  const usersAdmin = new UsersAdminService(users, sessionsRepo, fakeHasher, audit, passthroughTx, clock);
   const invitations = new InvitationsService(
     invitationsRepo,
     { build: (token) => `http://localhost:3000/convite#${token}` },
@@ -64,6 +85,9 @@ export function buildHarness() {
     audit,
     sessions,
     login,
+    mfa,
+    recoveryRepo,
+    store,
     usersAdmin,
     settings,
     invitations,

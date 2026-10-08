@@ -13,6 +13,10 @@ export interface UserRecord {
   lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
+  mfaEnabled: boolean;
+  /** Segredo TOTP cifrado (AES-256-GCM). Nunca sai da camada de aplicação. */
+  mfaSecret: Buffer | null;
+  mfaLastStep: number | null;
 }
 
 /** Visão pública de um usuário — nunca inclui hash de senha nem segredo MFA. */
@@ -21,6 +25,7 @@ export interface UserView {
   email: string;
   role: Role;
   status: UserStatus;
+  mfaEnabled: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -31,6 +36,7 @@ export function toUserView(u: UserRecord): UserView {
     email: u.email,
     role: u.role,
     status: u.status,
+    mfaEnabled: u.mfaEnabled,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
   };
@@ -42,7 +48,13 @@ export interface AuthUser {
   email: string;
   role: Role;
   sessionId: string;
+  mfaEnabled: boolean;
+  /** Quando o MFA foi confirmado pela última vez nesta sessão. */
+  mfaVerifiedAt: Date | null;
 }
+
+/** Ações sensíveis de admin exigem MFA confirmado há no máximo 5 minutos. */
+export const MFA_REAUTH_WINDOW_MS = 5 * 60_000;
 
 // ---- Bloqueio por tentativas erradas (Flow: 5 tentativas → 15 minutos) ----
 

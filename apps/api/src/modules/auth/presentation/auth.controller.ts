@@ -5,11 +5,17 @@ import type { RequestContext } from '../../../shared/application/ports.js';
 import { ReqContext } from '../../../shared/presentation/request-context.js';
 import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe.js';
 import { LoginUseCase } from '../application/login.use-case.js';
+import { MfaService } from '../application/mfa.service.js';
 import { SessionService } from '../application/session.service.js';
 import { PasswordInputSchema } from '../domain/password-policy.js';
 import type { AuthUser } from '../domain/user.js';
 import { AuthCookies } from './auth-cookies.js';
-import { CurrentUser, Public } from './decorators.js';
+import { AllowWithoutMfa, CurrentUser, Public } from './decorators.js';
+
+const MfaVerifySchema = z.strictObject({
+  challenge: z.string().max(128),
+  code: z.string().trim().min(6).max(32),
+});
 
 const LoginSchema = z.strictObject({
   email: z.string().trim().max(254),
@@ -22,6 +28,7 @@ export class AuthController {
     private readonly login: LoginUseCase,
     private readonly sessions: SessionService,
     private readonly cookies: AuthCookies,
+    private readonly mfa: MfaService,
   ) {}
 
   @Public()
@@ -32,7 +39,22 @@ export class AuthController {
     @ReqContext() ctx: RequestContext,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { user, session } = await this.login.execute(body, ctx);
+    const result = await this.login.execute(body, ctx);
+    if (result.kind === 'mfa') return { mfaRequired: true, challenge: result.challenge };
+    this.cookies.set(res, result.session);
+    return { user: result.user, accessExpiresAt: result.session.accessExpiresAt };
+  }
+
+  /** Segunda etapa do login: troca o desafio + código (TOTP ou recuperação) pela sessão. */
+  @Public()
+  @Post('mfa/verify')
+  @HttpCode(200)
+  async verifyMfa(
+    @Body(new ZodValidationPipe(MfaVerifySchema)) body: z.infer<typeof MfaVerifySchema>,
+    @ReqContext() ctx: RequestContext,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { user, session } = await this.mfa.completeLogin(body.challenge, body.code, ctx);
     this.cookies.set(res, session);
     return { user, accessExpiresAt: session.accessExpiresAt };
   }
@@ -55,6 +77,7 @@ export class AuthController {
     }
   }
 
+  @AllowWithoutMfa()
   @Post('logout')
   @HttpCode(204)
   async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
@@ -62,8 +85,15 @@ export class AuthController {
     this.cookies.clear(res);
   }
 
+  @AllowWithoutMfa()
   @Get('me')
-  me(@CurrentUser() user: AuthUser) {
-    return { id: user.id, email: user.email, role: user.role };
+  async me(@CurrentUser() user: AuthUser) {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      mfaEnabled: user.mfaEnabled,
+      mfaRequired: await this.mfa.isRequired(),
+    };
   }
 }

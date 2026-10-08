@@ -3,6 +3,7 @@ import type {
   AuditEntry,
   AuditLog,
   Clock,
+  EphemeralStore,
   RateLimiter,
   TransactionRunner,
 } from '../../src/shared/application/ports.js';
@@ -10,6 +11,9 @@ import type {
   AccessTokenClaims,
   AccessTokenService,
   PasswordHasher,
+  QrRenderer,
+  RecoveryCodeRepository,
+  SecretCipher,
   SessionRecord,
   SessionRepository,
   UserRepository,
@@ -82,6 +86,9 @@ export class InMemoryUsers implements UserRepository {
       lockedUntil: null,
       lastLoginAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
+      mfaEnabled: false,
+      mfaSecret: null,
+      mfaLastStep: null,
       ...partial,
     };
     this.rows.set(user.id, user);
@@ -107,6 +114,14 @@ export class InMemoryUsers implements UserRepository {
   async list() {
     return [...this.rows.values()];
   }
+  async setMfa(id: string, data: Parameters<UserRepository['setMfa']>[1]) {
+    const u = this.rows.get(id);
+    if (u) this.rows.set(id, { ...u, mfaEnabled: data.enabled, mfaSecret: data.secret, mfaLastStep: data.lastStep });
+  }
+  async setMfaLastStep(id: string, step: number) {
+    const u = this.rows.get(id);
+    if (u) this.rows.set(id, { ...u, mfaLastStep: step });
+  }
   async countAdmins() {
     return [...this.rows.values()].filter((u) => u.role === 'admin').length;
   }
@@ -123,12 +138,17 @@ export class InMemorySessions implements SessionRepository {
       refreshHash: data.refreshHash,
       expiresAt: data.expiresAt,
       revokedAt: null,
+      mfaVerifiedAt: data.mfaVerifiedAt ?? null,
     };
     this.rows.set(row.id, row);
     return row;
   }
   async findById(id: string) {
     return this.rows.get(id) ?? null;
+  }
+  async markMfaVerified(id: string, at: Date) {
+    const s = this.rows.get(id);
+    if (s) s.mfaVerifiedAt = at;
   }
   async findByRefreshHashForUpdate(hash: Buffer) {
     return [...this.rows.values()].find((s) => s.refreshHash.equals(hash)) ?? null;
@@ -203,6 +223,7 @@ export class InMemorySettings implements SettingsRepository {
     seed('app.accent', '#3DD6C3', true);
     seed('app.logo_url', null, true);
     seed('invite.ttl_hours', 72, false);
+    seed('security.mfa_required', true, false);
   }
   async findAll() {
     return [...this.rows.values()];
@@ -237,5 +258,50 @@ export class MemoryBrandingCache implements BrandingCache {
   async invalidate() {
     this.value = null;
     this.invalidations++;
+  }
+}
+
+export class InMemoryRecoveryCodes implements RecoveryCodeRepository {
+  readonly rows = new Map<string, { userId: string; hash: Buffer; usedAt: Date | null }[]>();
+  async replaceAll(userId: string, hashes: Buffer[]) {
+    this.rows.set(userId, hashes.map((hash) => ({ userId, hash, usedAt: null })));
+  }
+  async consume(userId: string, hash: Buffer, at: Date) {
+    const row = this.rows.get(userId)?.find((r) => !r.usedAt && r.hash.equals(hash));
+    if (!row) return false;
+    row.usedAt = at;
+    return true;
+  }
+  async countUnused(userId: string) {
+    return (this.rows.get(userId) ?? []).filter((r) => !r.usedAt).length;
+  }
+  async deleteAll(userId: string) {
+    this.rows.delete(userId);
+  }
+}
+
+/** "Cifra" reversível e visivelmente diferente do texto — basta para os testes de regra. */
+export const fakeCipher: SecretCipher = {
+  encrypt: (plain) => Buffer.concat([Buffer.from('enc:'), plain]),
+  decrypt: (sealed) => sealed.subarray(4),
+};
+
+export const fakeQr: QrRenderer = { toDataUri: async (text) => `data:text/plain,${encodeURIComponent(text)}` };
+
+export class MemoryEphemeralStore implements EphemeralStore {
+  readonly rows = new Map<string, string>();
+  async set(key: string, value: string) {
+    this.rows.set(key, value);
+  }
+  async get(key: string) {
+    return this.rows.get(key) ?? null;
+  }
+  async take(key: string) {
+    const v = this.rows.get(key) ?? null;
+    this.rows.delete(key);
+    return v;
+  }
+  async del(key: string) {
+    this.rows.delete(key);
   }
 }

@@ -7,7 +7,7 @@ import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.p
 import { PasswordInputSchema } from '../../auth/domain/password-policy.js';
 import { type AuthUser, ROLES } from '../../auth/domain/user.js';
 import { AuthCookies } from '../../auth/presentation/auth-cookies.js';
-import { CurrentUser, Public, Roles } from '../../auth/presentation/decorators.js';
+import { CurrentUser, Public, RequireRecentMfa, Roles } from '../../auth/presentation/decorators.js';
 import { InvitationsService } from '../application/invitations.service.js';
 import { MAX_TTL_HOURS, MIN_TTL_HOURS } from '../domain/invitation.js';
 
@@ -26,6 +26,7 @@ const AcceptSchema = z.strictObject({ token: z.string().max(64), password: Passw
 export class AdminInvitationsController {
   constructor(private readonly invitations: InvitationsService) {}
 
+  @RequireRecentMfa()
   @Post()
   create(
     @CurrentUser() actor: AuthUser,

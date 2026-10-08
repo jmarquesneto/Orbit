@@ -15,6 +15,9 @@ const columns = {
   lockedUntil: users.lockedUntil,
   lastLoginAt: users.lastLoginAt,
   createdAt: users.createdAt,
+  mfaEnabled: users.mfaEnabled,
+  mfaSecret: users.mfaSecret,
+  mfaLastStep: users.mfaLastStep,
 };
 
 @Injectable()
@@ -47,6 +50,17 @@ export class DrizzleUserRepository implements UserRepository {
 
   async updateStatus(id: string, status: UserStatus) {
     await this.ctx.db.update(users).set({ status }).where(eq(users.id, id));
+  }
+
+  async setMfa(id: string, data: { enabled: boolean; secret: Buffer | null; lastStep: number | null }) {
+    await this.ctx.db
+      .update(users)
+      .set({ mfaEnabled: data.enabled, mfaSecret: data.secret, mfaLastStep: data.lastStep })
+      .where(eq(users.id, id));
+  }
+
+  async setMfaLastStep(id: string, step: number) {
+    await this.ctx.db.update(users).set({ mfaLastStep: step }).where(eq(users.id, id));
   }
 
   list(): Promise<UserRecord[]> {

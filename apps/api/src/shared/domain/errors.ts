@@ -67,3 +67,27 @@ export class RateLimitedError extends DomainError {
     super('Muitas tentativas. Aguarde um pouco e tente novamente.');
   }
 }
+
+/** Código de MFA (TOTP ou de recuperação) errado, expirado ou já usado. */
+export class InvalidMfaCodeError extends DomainError {
+  readonly code = 'invalid_mfa_code';
+  constructor() {
+    super('Código inválido. Confira o app autenticador e tente de novo.');
+  }
+}
+
+/** A instalação exige MFA e este usuário ainda não configurou. */
+export class MfaSetupRequiredError extends DomainError {
+  readonly code = 'mfa_setup_required';
+  constructor() {
+    super('Configure a verificação em duas etapas para continuar.');
+  }
+}
+
+/** Ação sensível: confirme o código do MFA de novo. */
+export class MfaReauthRequiredError extends DomainError {
+  readonly code = 'mfa_reauth_required';
+  constructor() {
+    super('Confirme o código do seu app autenticador para continuar.');
+  }
+}

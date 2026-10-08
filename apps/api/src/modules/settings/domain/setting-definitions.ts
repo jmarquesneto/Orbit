@@ -46,6 +46,11 @@ export const SETTING_DEFINITIONS = {
     isPublic: true,
     description: 'Endereço do logotipo (https) ou vazio',
   },
+  'security.mfa_required': {
+    schema: z.boolean(),
+    isPublic: false,
+    description: 'Exigir verificação em duas etapas (MFA) de todos os usuários',
+  },
   'invite.ttl_hours': {
     schema: InviteTtlSchema,
     isPublic: false,

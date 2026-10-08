@@ -10,6 +10,7 @@ const columns = {
   familyId: sessions.familyId,
   expiresAt: sessions.expiresAt,
   revokedAt: sessions.revokedAt,
+  mfaVerifiedAt: sessions.mfaVerifiedAt,
 };
 
 @Injectable()
@@ -27,10 +28,15 @@ export class DrizzleSessionRepository implements SessionRepository {
         userAgent: data.userAgent,
         expiresAt: data.expiresAt,
         createdAt: data.at,
+        mfaVerifiedAt: data.mfaVerifiedAt ?? null,
       })
       .returning(columns);
     if (!row) throw new Error('Falha ao criar sessão');
     return row;
+  }
+
+  async markMfaVerified(id: string, at: Date) {
+    await this.ctx.db.update(sessions).set({ mfaVerifiedAt: at }).where(eq(sessions.id, id));
   }
 
   async findById(id: string): Promise<SessionRecord | null> {

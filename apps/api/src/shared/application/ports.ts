@@ -50,3 +50,13 @@ export interface AuditLog {
   record(entry: AuditEntry): Promise<void>;
 }
 export const AUDIT_LOG = Symbol('AUDIT_LOG');
+
+/** Dados temporários com prazo de validade (desafios de login, cadastros em andamento). */
+export interface EphemeralStore {
+  set(key: string, value: string, ttlSeconds: number): Promise<void>;
+  get(key: string): Promise<string | null>;
+  /** Lê e apaga numa operação só: um desafio nunca é usado duas vezes. */
+  take(key: string): Promise<string | null>;
+  del(key: string): Promise<void>;
+}
+export const EPHEMERAL_STORE = Symbol('EPHEMERAL_STORE');

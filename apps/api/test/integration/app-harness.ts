@@ -8,13 +8,24 @@ import type { Env } from '../../src/config/env.schema.js';
 import { configureApp } from '../../src/configure-app.js';
 import { DbContext } from '../../src/infrastructure/database/db-context.js';
 import { SessionService } from '../../src/modules/auth/application/session.service.js';
-import { USER_REPOSITORY, type UserRepository } from '../../src/modules/auth/application/ports.js';
+import {
+  PASSWORD_HASHER,
+  type PasswordHasher,
+  SECRET_CIPHER,
+  type SecretCipher,
+  USER_REPOSITORY,
+  type UserRepository,
+} from '../../src/modules/auth/application/ports.js';
+import { generateTotpSecret } from '../../src/modules/auth/domain/totp.js';
 import { applyTestEnv } from './test-env.js';
 
 export interface TestUser {
   id: string;
   email: string;
   token: string;
+  sessionId: string;
+  /** Segredo TOTP do "app autenticador" deste usuário (null se criado sem MFA). */
+  mfaSecret: Buffer | null;
 }
 
 export async function startApp() {
@@ -27,15 +38,29 @@ export async function startApp() {
   const db = app.get(DbContext);
   const users = app.get<UserRepository>(USER_REPOSITORY);
   const sessions = app.get(SessionService);
+  const cipher = app.get<SecretCipher>(SECRET_CIPHER);
+  const hasher = app.get<PasswordHasher>(PASSWORD_HASHER);
 
-  /** Cria um usuário comum direto no banco e devolve um access token válido para ele. */
-  async function newUser(label = 'user'): Promise<TestUser> {
+  /**
+   * Cria um usuário direto no banco e devolve um access token válido para ele.
+   * Por padrão já com MFA ativo e confirmado agora, como alguém que acabou de entrar.
+   */
+  async function newUser(
+    label = 'user',
+    opts: { mfa?: boolean; password?: string; role?: 'user' | 'admin' } = {},
+  ): Promise<TestUser> {
     const email = `${label}-${randomUUID()}@teste.local`;
-    const user = await db.run(() =>
-      users.create({ email, passwordHash: 'x', role: 'user', at: new Date() }),
+    const mfaSecret = opts.mfa === false ? null : generateTotpSecret();
+    const passwordHash = opts.password ? await hasher.hash(opts.password) : 'x';
+    const user = await db.run(async () => {
+      const created = await users.create({ email, passwordHash, role: opts.role ?? 'user', at: new Date() });
+      if (mfaSecret) await users.setMfa(created.id, { enabled: true, secret: cipher.encrypt(mfaSecret), lastStep: null });
+      return created;
+    });
+    const session = await db.run(() =>
+      sessions.issue(user, { ip: '127.0.0.1', userAgent: 'vitest' }, { mfaVerifiedAt: mfaSecret ? new Date() : null }),
     );
-    const session = await db.run(() => sessions.issue(user, { ip: '127.0.0.1', userAgent: 'vitest' }));
-    return { id: user.id, email, token: session.accessToken };
+    return { id: user.id, email, token: session.accessToken, sessionId: session.sessionId, mfaSecret };
   }
 
   /** Cliente HTTP autenticado como `user` (Bearer: sem cookie, então sem exigência de Origin). */

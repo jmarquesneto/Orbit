@@ -9,6 +9,8 @@ export interface UserRepository {
     state: { failedLogins: number; lockedUntil: Date | null; lastLoginAt?: Date },
   ): Promise<void>;
   updateStatus(id: string, status: UserStatus): Promise<void>;
+  setMfa(id: string, data: { enabled: boolean; secret: Buffer | null; lastStep: number | null }): Promise<void>;
+  setMfaLastStep(id: string, step: number): Promise<void>;
   list(): Promise<UserRecord[]>;
   countAdmins(): Promise<number>;
 }
@@ -20,6 +22,7 @@ export interface SessionRecord {
   familyId: string;
   expiresAt: Date;
   revokedAt: Date | null;
+  mfaVerifiedAt: Date | null;
 }
 
 export interface SessionRepository {
@@ -31,7 +34,9 @@ export interface SessionRepository {
     userAgent: string | null;
     expiresAt: Date;
     at: Date;
+    mfaVerifiedAt?: Date | null;
   }): Promise<SessionRecord>;
+  markMfaVerified(id: string, at: Date): Promise<void>;
   findById(id: string): Promise<SessionRecord | null>;
   /** Trava a sessão até o fim da transação: duas renovações simultâneas não passam juntas. */
   findByRefreshHashForUpdate(hash: Buffer): Promise<SessionRecord | null>;
@@ -65,3 +70,25 @@ export interface AuthConfig {
   refreshTtlSeconds: number;
 }
 export const AUTH_CONFIG = Symbol('AUTH_CONFIG');
+
+export interface RecoveryCodeRepository {
+  replaceAll(userId: string, hashes: Buffer[]): Promise<void>;
+  /** Marca como usado e devolve true só se o código existia e ainda não tinha sido usado. */
+  consume(userId: string, hash: Buffer, at: Date): Promise<boolean>;
+  countUnused(userId: string): Promise<number>;
+  deleteAll(userId: string): Promise<void>;
+}
+export const RECOVERY_CODE_REPOSITORY = Symbol('RECOVERY_CODE_REPOSITORY');
+
+/** Cifra simétrica autenticada para segredos em repouso (segredo do MFA). */
+export interface SecretCipher {
+  encrypt(plain: Buffer): Buffer;
+  decrypt(sealed: Buffer): Buffer;
+}
+export const SECRET_CIPHER = Symbol('SECRET_CIPHER');
+
+export interface QrRenderer {
+  /** Devolve uma imagem SVG do QR code como data URI. */
+  toDataUri(text: string): Promise<string>;
+}
+export const QR_RENDERER = Symbol('QR_RENDERER');

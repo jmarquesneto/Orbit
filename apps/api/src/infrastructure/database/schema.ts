@@ -39,6 +39,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   mfaSecret: bytea('mfa_secret'),
   mfaEnabled: boolean('mfa_enabled').notNull().default(false),
+  /** Último passo TOTP aceito: o mesmo código nunca vale duas vezes (anti-replay). */
+  mfaLastStep: bigint('mfa_last_step', { mode: 'number' }),
   role: userRole('role').notNull().default('user'),
   status: userStatus('status').notNull().default('active'),
   failedLogins: smallint('failed_logins').notNull().default(0),
@@ -83,6 +85,8 @@ export const sessions = pgTable(
     userAgent: text('user_agent'),
     expiresAt: timestamptz('expires_at').notNull(),
     revokedAt: timestamptz('revoked_at'),
+    /** Última confirmação de MFA nesta sessão (ações de admin exigem uma recente). */
+    mfaVerifiedAt: timestamptz('mfa_verified_at'),
     createdAt: createdAt(),
   },
   (t) => [index('sessions_user_idx').on(t.userId), index('sessions_family_idx').on(t.familyId)],
@@ -459,5 +463,49 @@ export const ofxEntries = pgTable(
   (t) => [
     index('ofx_entries_import_idx').on(t.importId),
     check('ofx_entries_score_range', sql`${t.score} BETWEEN 0 AND 100`),
+  ],
+);
+
+// ================================================== MFA e transferências
+
+export const mfaRecoveryCodes = pgTable(
+  'mfa_recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** SHA-256 do código normalizado; o código em claro só é mostrado uma vez. */
+    codeHash: bytea('code_hash').notNull().unique(),
+    usedAt: timestamptz('used_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('mfa_recovery_codes_user_idx').on(t.userId)],
+);
+
+/** Dinheiro movido entre duas carteiras da mesma pessoa: não é receita nem despesa. */
+export const transfers = pgTable(
+  'transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromWalletId: uuid('from_wallet_id')
+      .notNull()
+      .references(() => wallets.id),
+    toWalletId: uuid('to_wallet_id')
+      .notNull()
+      .references(() => wallets.id),
+    amountCents: cents('amount_cents').notNull(),
+    occurredOn: calendarDate('occurred_on').notNull(),
+    description: text('description'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('transfers_from_idx').on(t.fromWalletId),
+    index('transfers_to_idx').on(t.toWalletId),
+    check('transfers_amount_positive', sql`${t.amountCents} > 0`),
+    check('transfers_distinct_wallets', sql`${t.fromWalletId} <> ${t.toWalletId}`),
   ],
 );

@@ -4,7 +4,7 @@ import type { RequestContext } from '../../../shared/application/ports.js';
 import { ReqContext } from '../../../shared/presentation/request-context.js';
 import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe.js';
 import type { AuthUser } from '../../auth/domain/user.js';
-import { CurrentUser, Public, Roles } from '../../auth/presentation/decorators.js';
+import { CurrentUser, Public, RequireRecentMfa, Roles } from '../../auth/presentation/decorators.js';
 import { SettingsService } from '../application/settings.service.js';
 
 /** Identidade pública: usada pelo frontend em todas as telas, inclusive antes do login. */
@@ -40,6 +40,7 @@ export class AdminSettingsController {
   }
 
   /** Ex.: PATCH /api/admin/settings/app.name  { "value": "Meu Sistema" } */
+  @RequireRecentMfa()
   @Patch(':key')
   async update(
     @CurrentUser() actor: AuthUser,

@@ -51,8 +51,9 @@ export class SessionService {
   async issue(
     user: { id: string; role: Role },
     ctx: RequestContext,
-    familyId: string = randomUUID(),
+    opts: { familyId?: string; mfaVerifiedAt?: Date | null } = {},
   ): Promise<IssuedSession> {
+    const familyId = opts.familyId ?? randomUUID();
     const now = this.clock.now();
     const refresh = generateSecureToken();
     const refreshExpiresAt = new Date(now.getTime() + this.config.refreshTtlSeconds * 1000);
@@ -64,6 +65,7 @@ export class SessionService {
       userAgent: ctx.userAgent,
       expiresAt: refreshExpiresAt,
       at: now,
+      mfaVerifiedAt: opts.mfaVerifiedAt ?? null,
     });
     const accessToken = await this.tokens.sign(
       { sub: user.id, sid: session.id, role: user.role },
@@ -108,11 +110,19 @@ export class SessionService {
       }
 
       await this.sessions.revoke(session.id, now);
-      return { ok: true as const, issued: await this.issue(user, ctx, session.familyId) };
+      // A renovação herda a última confirmação de MFA: a janela de 5 min não "reinicia".
+      return {
+        ok: true as const,
+        issued: await this.issue(user, ctx, { familyId: session.familyId, mfaVerifiedAt: session.mfaVerifiedAt }),
+      };
     });
 
     if (!outcome.ok) throw new UnauthenticatedError();
     return outcome.issued;
+  }
+
+  markMfaVerified(sessionId: string): Promise<void> {
+    return this.sessions.markMfaVerified(sessionId, this.clock.now());
   }
 
   /** Logout: encerra a família da sessão atual (este dispositivo). */
@@ -137,6 +147,13 @@ export class SessionService {
     }
     const user = await this.users.findById(claims.sub);
     if (!user || !canAuthenticate(user, now)) throw new UnauthenticatedError();
-    return { id: user.id, email: user.email, role: user.role, sessionId: session.id };
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      sessionId: session.id,
+      mfaEnabled: user.mfaEnabled,
+      mfaVerifiedAt: session.mfaVerifiedAt,
+    };
   }
 }

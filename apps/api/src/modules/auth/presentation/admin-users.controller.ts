@@ -1,24 +1,29 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { z } from 'zod';
 import type { RequestContext } from '../../../shared/application/ports.js';
 import { ReqContext } from '../../../shared/presentation/request-context.js';
 import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe.js';
+import { MfaService } from '../application/mfa.service.js';
 import { UsersAdminService } from '../application/users-admin.service.js';
 import type { AuthUser } from '../domain/user.js';
-import { CurrentUser, Roles } from './decorators.js';
+import { CurrentUser, RequireRecentMfa, Roles } from './decorators.js';
 
 const StatusSchema = z.strictObject({ status: z.enum(['active', 'locked']) });
 
 @Controller('admin/users')
 @Roles('admin')
 export class AdminUsersController {
-  constructor(private readonly users: UsersAdminService) {}
+  constructor(
+    private readonly users: UsersAdminService,
+    private readonly mfa: MfaService,
+  ) {}
 
   @Get()
   async list() {
     return { users: await this.users.list() };
   }
 
+  @RequireRecentMfa()
   @Patch(':id/status')
   async setStatus(
     @CurrentUser() actor: AuthUser,
@@ -27,5 +32,17 @@ export class AdminUsersController {
     @ReqContext() ctx: RequestContext,
   ) {
     return { user: await this.users.setStatus(actor.id, id, body.status, ctx.ip) };
+  }
+
+  /** Para quem perdeu o celular: desativa o MFA e encerra as sessões da pessoa. */
+  @RequireRecentMfa()
+  @Post(':id/mfa/reset')
+  @HttpCode(200)
+  async resetMfa(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @ReqContext() ctx: RequestContext,
+  ) {
+    return { user: await this.mfa.adminReset(actor.id, id, ctx.ip) };
   }
 }

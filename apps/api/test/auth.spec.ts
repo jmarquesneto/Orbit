@@ -10,10 +10,12 @@ describe('LoginUseCase', () => {
     const h = buildHarness();
     const seeded = h.users.seed({ email: 'ana@exemplo.com', failedLogins: 3 });
 
-    const { user, session } = await h.login.execute(
+    const result = await h.login.execute(
       { email: '  ANA@exemplo.com ', password: 'senha-correta-123' },
       ctx,
     );
+    if (result.kind !== 'session') throw new Error('esperava sessão');
+    const { user, session } = result;
 
     expect(user.id).toBe(seeded.id);
     expect(user).not.toHaveProperty('passwordHash');

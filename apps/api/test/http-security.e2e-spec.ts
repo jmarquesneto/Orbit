@@ -18,8 +18,16 @@ import { ConfigModule } from '../src/config/config.module.js';
 import { SessionService } from '../src/modules/auth/application/session.service.js';
 import type { AuthUser } from '../src/modules/auth/domain/user.js';
 import { AuthCookies } from '../src/modules/auth/presentation/auth-cookies.js';
-import { CurrentUser, Public, Roles } from '../src/modules/auth/presentation/decorators.js';
-import { JwtAuthGuard, RolesGuard } from '../src/modules/auth/presentation/guards.js';
+import { MfaService } from '../src/modules/auth/application/mfa.service.js';
+import {
+  AllowWithoutMfa,
+  CurrentUser,
+  Public,
+  RequireRecentMfa,
+  Roles,
+} from '../src/modules/auth/presentation/decorators.js';
+import { JwtAuthGuard, MfaGuard, RolesGuard } from '../src/modules/auth/presentation/guards.js';
+import { CLOCK } from '../src/shared/application/ports.js';
 import { UnauthenticatedError } from '../src/shared/domain/errors.js';
 import { DomainExceptionFilter } from '../src/shared/presentation/domain-exception.filter.js';
 import { OriginCheckMiddleware } from '../src/shared/presentation/origin-check.middleware.js';
@@ -27,12 +35,34 @@ import { ZodValidationPipe } from '../src/shared/presentation/zod-validation.pip
 
 const WEB_ORIGIN = 'http://localhost:3000';
 const users: Record<string, AuthUser> = {
-  'token-admin-aaaaaaaaaaaaa': { id: 'a', email: 'admin@x.com', role: 'admin', sessionId: 's1' },
-  'token-user-bbbbbbbbbbbbbb': { id: 'u', email: 'user@x.com', role: 'user', sessionId: 's2' },
+  'token-admin-aaaaaaaaaaaaa': { id: 'a', email: 'admin@x.com', role: 'admin', sessionId: 's1', mfaEnabled: true, mfaVerifiedAt: null },
+  'token-fresh-cccccccccccccc': {
+    id: 'f',
+    email: 'fresh@x.com',
+    role: 'admin',
+    sessionId: 's3',
+    mfaEnabled: true,
+    mfaVerifiedAt: new Date(),
+  },
+  'token-user-bbbbbbbbbbbbbb': { id: 'u', email: 'user@x.com', role: 'user', sessionId: 's2', mfaEnabled: false, mfaVerifiedAt: null },
 };
+
+let mfaRequired = false;
 
 @Controller()
 class ProbeController {
+  @RequireRecentMfa()
+  @Post('sensitive')
+  sensitive() {
+    return { ok: true };
+  }
+
+  @AllowWithoutMfa()
+  @Get('setup')
+  setup() {
+    return { ok: true };
+  }
+
   @Public()
   @Get('open')
   open() {
@@ -72,7 +102,10 @@ class ProbeController {
         },
       },
     },
+    { provide: MfaService, useValue: { isRequired: async () => mfaRequired } },
+    { provide: CLOCK, useValue: { now: () => new Date() } },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: MfaGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
@@ -123,6 +156,28 @@ describe('Segurança HTTP (guards, CSRF, validação)', () => {
   it('aceita o token pelo cookie httpOnly ou pelo header Bearer', async () => {
     await http().get('/mine').set('Cookie', 'access_token=token-user-bbbbbbbbbbbbbb').expect(200, { id: 'u' });
     await http().get('/mine').set('Authorization', 'Bearer token-user-bbbbbbbbbbbbbb').expect(200);
+  });
+
+  it('MFA obrigatório: sem cadastro só passa nas rotas liberadas', async () => {
+    mfaRequired = true;
+    try {
+      const auth = { Authorization: 'Bearer token-user-bbbbbbbbbbbbbb' };
+      const res = await http().get('/mine').set(auth).expect(403);
+      expect(res.body.error.code).toBe('mfa_setup_required');
+      await http().get('/setup').set(auth).expect(200);
+      await http().get('/mine').set('Authorization', 'Bearer token-admin-aaaaaaaaaaaaa').expect(200);
+    } finally {
+      mfaRequired = false;
+    }
+  });
+
+  it('ação sensível exige MFA confirmado nos últimos 5 minutos', async () => {
+    const res = await http()
+      .post('/sensitive')
+      .set('Authorization', 'Bearer token-admin-aaaaaaaaaaaaa')
+      .expect(403);
+    expect(res.body.error.code).toBe('mfa_reauth_required');
+    await http().post('/sensitive').set('Authorization', 'Bearer token-fresh-cccccccccccccc').expect(201);
   });
 
   it('usuário comum em rota de admin → 403', () =>

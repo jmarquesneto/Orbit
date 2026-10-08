@@ -32,8 +32,12 @@ export interface SettingView {
   updatedAt: Date;
 }
 
+export type SettingsChangeListener = (key: SettingKey, value: unknown) => void | Promise<void>;
+
 @Injectable()
 export class SettingsService {
+  private readonly listeners = new Set<SettingsChangeListener>();
+
   constructor(
     @Inject(SETTINGS_REPOSITORY) private readonly repo: SettingsRepository,
     @Inject(BRANDING_CACHE) private readonly cache: BrandingCache,
@@ -41,6 +45,12 @@ export class SettingsService {
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
+
+  /** Avisa quem depende de uma configuração (cache da política de MFA, eventos de branding). */
+  onChange(listener: SettingsChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 
   /** Identidade pública (nome, cor, logo). Servida a qualquer visitante, com cache. */
   async getBranding(): Promise<Branding> {
@@ -112,6 +122,10 @@ export class SettingsService {
     });
 
     if (updated.isPublic) await this.cache.invalidate();
+    for (const listener of this.listeners) {
+      // Um ouvinte com problema não pode desfazer uma alteração já gravada e auditada.
+      await Promise.resolve(listener(key, value)).catch(() => undefined);
+    }
     return this.toView(updated);
   }
 

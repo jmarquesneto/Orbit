@@ -14,7 +14,12 @@ import {
 import { InvalidCredentialsError } from '../../../shared/domain/errors.js';
 import { canAuthenticate, registerFailedLogin, toUserView, type UserView } from '../domain/user.js';
 import { PASSWORD_HASHER, type PasswordHasher, USER_REPOSITORY, type UserRepository } from './ports.js';
+import { MfaService } from './mfa.service.js';
 import { type IssuedSession, SessionService } from './session.service.js';
+
+export type LoginResult =
+  | { kind: 'session'; user: UserView; session: IssuedSession }
+  | { kind: 'mfa'; challenge: string };
 
 @Injectable()
 export class LoginUseCase {
@@ -29,12 +34,13 @@ export class LoginUseCase {
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly sessions: SessionService,
+    private readonly mfa: MfaService,
   ) {}
 
   async execute(
     input: { email: string; password: string },
     ctx: RequestContext,
-  ): Promise<{ user: UserView; session: IssuedSession }> {
+  ): Promise<LoginResult> {
     const email = input.email.trim().toLowerCase();
     await enforceRateLimits(this.limiter, [
       { key: `login:ip:${ctx.ip ?? 'unknown'}`, limit: 20, windowSeconds: 300 },
@@ -77,6 +83,12 @@ export class LoginUseCase {
       throw new InvalidCredentialsError();
     }
 
+    // Com MFA ativo a senha certa não abre sessão: gera um desafio que só o código troca.
+    // O contador de erros só zera quando o código também estiver certo.
+    if (user.mfaEnabled) {
+      return { kind: 'mfa', challenge: await this.mfa.createLoginChallenge(user.id) };
+    }
+
     return this.tx.run(async () => {
       await this.users.updateLoginState(user.id, { failedLogins: 0, lockedUntil: null, lastLoginAt: now });
       const session = await this.sessions.issue(user, ctx);
@@ -87,7 +99,7 @@ export class LoginUseCase {
         entityId: session.sessionId,
         ip: ctx.ip,
       });
-      return { user: toUserView({ ...user, lastLoginAt: now }), session };
+      return { kind: 'session' as const, user: toUserView({ ...user, lastLoginAt: now }), session };
     });
   }
 
