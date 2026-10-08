@@ -37,6 +37,9 @@ importers:
       jose:
         specifier: ^6.2.12
         version: 6.2.12
+      ofx-js:
+        specifier: ^1.1.2
+        version: 1.1.2
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -2129,6 +2132,9 @@ packages:
   obug@2.2.1:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
+
+  ofx-js@1.1.2:
+    resolution: {integrity: sha512-aKGgu+/vF70vvPpjSuAiTy+jroSb2JVtKDf72U9ZgCf8/zZk/lOuzRbOc73Fn9xdecolBOBW5i1c6uVkj0r1zw==}
 
   on-finished@2.4.1:
     resolution: {integrity: sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==}
@@ -4265,6 +4271,8 @@ snapshots:
   object-inspect@1.13.4: {}
 
   obug@2.2.1: {}
+
+  ofx-js@1.1.2: {}
 
   on-finished@2.4.1:
     dependencies:

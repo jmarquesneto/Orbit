@@ -14,6 +14,7 @@ export interface NewTransaction {
   status: TransactionStatus;
   dueDate: IsoDate;
   paidAt: Date | null;
+  ofxFitid?: string | null;
   createdBy: string;
 }
 
@@ -30,6 +31,15 @@ export interface TransactionRepository {
   ): Promise<TransactionRecord | null>;
   delete(id: string): Promise<void>;
   markInvoicePaid(invoiceId: string, at: Date): Promise<void>;
+
+  // ---- conciliação bancária (OFX)
+  /** Lançamentos ainda não pagos da carteira, com vencimento em [from, to], sem vínculo com extrato. */
+  findReconcilable(walletId: string, from: IsoDate, to: IsoDate): Promise<TransactionRecord[]>;
+  /** Quais destes FITIDs já confirmaram algum lançamento nesta carteira. */
+  existingFitIds(walletId: string, fitIds: string[]): Promise<Set<string>>;
+  /** Marca como pago pelo banco, com o valor real do extrato. Devolve false se o RLS barrou. */
+  linkToBank(id: string, data: { amountCents: number; paidAt: Date; ofxFitid: string }): Promise<boolean>;
+  unlinkFromBank(id: string): Promise<boolean>;
 }
 export const TRANSACTION_REPOSITORY = Symbol('TRANSACTION_REPOSITORY');
 

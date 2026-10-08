@@ -17,6 +17,8 @@ export interface TransactionRecord {
   status: TransactionStatus;
   dueDate: IsoDate;
   paidAt: Date | null;
+  /** Identificador da linha do extrato bancário que confirmou este lançamento. */
+  ofxFitid: string | null;
   createdBy: string;
   version: number;
   createdAt: Date;

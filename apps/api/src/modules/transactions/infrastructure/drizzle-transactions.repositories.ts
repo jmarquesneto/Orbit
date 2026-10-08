@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, eq, gte, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lt, lte, ne, sql } from 'drizzle-orm';
 import { DbContext } from '../../../infrastructure/database/db-context.js';
 import { installmentPlans, transactions } from '../../../infrastructure/database/schema.js';
 import type { IsoDate } from '../../../shared/domain/calendar.js';
@@ -25,6 +25,7 @@ const columns = {
   status: transactions.status,
   dueDate: transactions.dueDate,
   paidAt: transactions.paidAt,
+  ofxFitid: transactions.ofxFitid,
   createdBy: transactions.createdBy,
   version: transactions.version,
   createdAt: transactions.createdAt,
@@ -81,6 +82,49 @@ export class DrizzleTransactionRepository implements TransactionRepository {
       .update(transactions)
       .set({ status: 'paid', paidAt: at, version: sql`${transactions.version} + 1` })
       .where(and(eq(transactions.invoiceId, invoiceId), ne(transactions.status, 'paid')));
+  }
+
+  findReconcilable(walletId: string, from: IsoDate, to: IsoDate): Promise<TransactionRecord[]> {
+    return this.ctx.db
+      .select(columns)
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.walletId, walletId),
+          ne(transactions.status, 'paid'),
+          isNull(transactions.invoiceId),
+          isNull(transactions.ofxFitid),
+          gte(transactions.dueDate, from),
+          lte(transactions.dueDate, to),
+        ),
+      );
+  }
+
+  async existingFitIds(walletId: string, fitIds: string[]): Promise<Set<string>> {
+    if (!fitIds.length) return new Set();
+    const rows = await this.ctx.db
+      .select({ fitid: transactions.ofxFitid })
+      .from(transactions)
+      .where(and(eq(transactions.walletId, walletId), inArray(transactions.ofxFitid, fitIds)));
+    return new Set(rows.map((r) => r.fitid).filter((f): f is string => f !== null));
+  }
+
+  async linkToBank(id: string, data: { amountCents: number; paidAt: Date; ofxFitid: string }) {
+    const rows = await this.ctx.db
+      .update(transactions)
+      .set({ ...data, status: 'paid', version: sql`${transactions.version} + 1` })
+      .where(and(eq(transactions.id, id), ne(transactions.status, 'paid')))
+      .returning({ id: transactions.id });
+    return rows.length === 1;
+  }
+
+  async unlinkFromBank(id: string) {
+    const rows = await this.ctx.db
+      .update(transactions)
+      .set({ status: 'open', paidAt: null, ofxFitid: null, version: sql`${transactions.version} + 1` })
+      .where(eq(transactions.id, id))
+      .returning({ id: transactions.id });
+    return rows.length === 1;
   }
 }
 

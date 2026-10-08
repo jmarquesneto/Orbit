@@ -29,6 +29,20 @@
       "when": 1791479093165,
       "tag": "0003_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791480463042,
+      "tag": "0004_ofx_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791480463978,
+      "tag": "0005_ofx_row_level_security",
+      "breakpoints": true
     }
   ]
 }

@@ -47,6 +47,11 @@ export async function startApp() {
       post: (url: string, body?: object) => request(server).post(`/api${url}`).set(auth).send(body ?? {}),
       patch: (url: string, body: object) => request(server).patch(`/api${url}`).set(auth).send(body),
       delete: (url: string) => request(server).delete(`/api${url}`).set(auth),
+      upload: (url: string, file: { name: string; bytes: Buffer }, fields: Record<string, string> = {}) => {
+        let req = request(server).post(`/api${url}`).set(auth).attach('file', file.bytes, file.name);
+        for (const [k, v] of Object.entries(fields)) req = req.field(k, v);
+        return req;
+      },
     };
   }
 

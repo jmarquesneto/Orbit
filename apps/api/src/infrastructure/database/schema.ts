@@ -404,3 +404,60 @@ export const resourceShares = pgTable(
     index('resource_shares_grantee_idx').on(t.granteeId),
   ],
 );
+
+// =================================================== Conciliação OFX
+
+export const ofxImportStatus = pgEnum('ofx_import_status', ['review', 'done']);
+export const ofxMatch = pgEnum('ofx_match', ['auto', 'suggest', 'new', 'dup']);
+export const ofxResolution = pgEnum('ofx_resolution', ['pending', 'linked', 'created', 'ignored']);
+
+export const ofxImports = pgTable(
+  'ofx_imports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    walletId: uuid('wallet_id')
+      .notNull()
+      .references(() => wallets.id, { onDelete: 'cascade' }),
+    uploadedBy: uuid('uploaded_by')
+      .notNull()
+      .references(() => users.id),
+    fileName: text('file_name').notNull(),
+    /** O mesmo arquivo não entra duas vezes na mesma conta. */
+    fileSha256: bytea('file_sha256').notNull(),
+    bankId: text('bank_id'),
+    accountMask: text('account_mask'),
+    periodStart: calendarDate('period_start'),
+    periodEnd: calendarDate('period_end'),
+    ledgerBalanceCents: bigint('ledger_balance_cents', { mode: 'number' }),
+    status: ofxImportStatus('status').notNull().default('review'),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('ofx_imports_wallet_file_unique').on(t.walletId, t.fileSha256)],
+);
+
+export const ofxEntries = pgTable(
+  'ofx_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => ofxImports.id, { onDelete: 'cascade' }),
+    fitid: text('fitid').notNull(),
+    postedAt: calendarDate('posted_at').notNull(),
+    /** Com sinal, como no extrato: negativo = saída da conta. */
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+    /** Texto do banco já saneado (sem controle, sem < >, até 255 caracteres). */
+    memo: text('memo').notNull(),
+    match: ofxMatch('match').notNull(),
+    score: smallint('score').notNull().default(0),
+    suggestedTransactionId: uuid('suggested_transaction_id').references(() => transactions.id, {
+      onDelete: 'set null',
+    }),
+    resolution: ofxResolution('resolution').notNull().default('pending'),
+    transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    index('ofx_entries_import_idx').on(t.importId),
+    check('ofx_entries_score_range', sql`${t.score} BETWEEN 0 AND 100`),
+  ],
+);

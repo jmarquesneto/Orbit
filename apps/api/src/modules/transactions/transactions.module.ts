@@ -21,5 +21,6 @@ import { CardPurchasesController, TransactionsController } from './presentation/
     TransactionsService,
     CardPurchasesService,
   ],
+  exports: [TRANSACTION_REPOSITORY],
 })
 export class TransactionsModule {}

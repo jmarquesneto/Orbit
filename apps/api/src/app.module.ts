@@ -10,6 +10,7 @@ import { BudgetsModule } from './modules/budgets/budgets.module.js';
 import { GoalsModule } from './modules/goals/goals.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { InvitationsModule } from './modules/invitations/invitations.module.js';
+import { OfxModule } from './modules/ofx/ofx.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
 import { SharingModule } from './modules/sharing/sharing.module.js';
 import { TransactionsModule } from './modules/transactions/transactions.module.js';
@@ -33,6 +34,7 @@ import { OriginCheckMiddleware } from './shared/presentation/origin-check.middle
     WalletsModule,
     TransactionsModule,
     GoalsModule,
+    OfxModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: DomainExceptionFilter }],
 })
