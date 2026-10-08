@@ -80,6 +80,15 @@ export class OfxController {
     return this.ofx.get(user.id, id);
   }
 
+  @Get('imports/:id/entries/:entryId/candidates')
+  async candidates(
+    @CurrentUser() user: AuthUser,
+    @Param('id', uuid) id: string,
+    @Param('entryId', uuid) entryId: string,
+  ) {
+    return { candidates: await this.ofx.candidates(user.id, id, entryId) };
+  }
+
   @Post('imports/:id/entries/:entryId/confirm')
   @HttpCode(200)
   confirm(

@@ -14,6 +14,7 @@ import { OfxModule } from './modules/ofx/ofx.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
 import { SharingModule } from './modules/sharing/sharing.module.js';
 import { TransactionsModule } from './modules/transactions/transactions.module.js';
+import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { WalletsModule } from './modules/wallets/wallets.module.js';
 import { DomainExceptionFilter } from './shared/presentation/domain-exception.filter.js';
 import { OriginCheckMiddleware } from './shared/presentation/origin-check.middleware.js';
@@ -33,6 +34,7 @@ import { OriginCheckMiddleware } from './shared/presentation/origin-check.middle
     BudgetsModule,
     WalletsModule,
     TransactionsModule,
+    TransfersModule,
     GoalsModule,
     OfxModule,
   ],

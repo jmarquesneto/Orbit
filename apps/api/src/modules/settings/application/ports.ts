@@ -34,3 +34,11 @@ export interface BrandingCache {
   invalidate(): Promise<void>;
 }
 export const BRANDING_CACHE = Symbol('BRANDING_CACHE');
+
+/** Avisa todas as instâncias da API (e, por SSE, as abas abertas) que a identidade mudou. */
+export interface BrandingBroadcaster {
+  publish(branding: Branding): Promise<void>;
+  /** Devolve a função que cancela a inscrição. */
+  subscribe(listener: (branding: Branding) => void): () => void;
+}
+export const BRANDING_BROADCASTER = Symbol('BRANDING_BROADCASTER');

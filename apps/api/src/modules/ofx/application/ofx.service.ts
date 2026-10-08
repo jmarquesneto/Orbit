@@ -22,7 +22,7 @@ import { AccessControlService } from '../../sharing/application/access-control.s
 import { TRANSACTION_REPOSITORY, type TransactionRepository } from '../../transactions/application/ports.js';
 import { balanceEffect, type TransactionRecord } from '../../transactions/domain/transaction.js';
 import { WalletsService } from '../../wallets/application/wallets.service.js';
-import { type MatchCandidate, reconcile } from '../domain/matching.js';
+import { type MatchCandidate, rankCandidates, reconcile } from '../domain/matching.js';
 import type { OfxStatement } from '../domain/statement.js';
 import {
   OFX_PARSER,
@@ -44,7 +44,19 @@ export interface OfxImportView {
   counts: Record<'linked' | 'suggest' | 'new' | 'other', number>;
 }
 
+export interface OfxCandidateView {
+  id: string;
+  description: string;
+  amountCents: number;
+  kind: TransactionRecord['kind'];
+  dueDate: IsoDate;
+  score: number;
+}
+
 const SEARCH_MARGIN_DAYS = 10;
+/** "Escolher outro" procura mais longe que a sugestão automática: conta atrasada, data errada… */
+const PICKER_MARGIN_DAYS = 45;
+const PICKER_LIMIT = 30;
 
 function shiftDays(date: IsoDate, days: number): IsoDate {
   const d = new Date(`${date}T00:00:00Z`);
@@ -191,6 +203,32 @@ export class OfxService {
         entries: views,
         counts,
       };
+    });
+  }
+
+  /** Lançamentos em aberto desta conta que podem ser esta linha do extrato ("Escolher outro"). */
+  candidates(actorId: string, importId: string, entryId: string): Promise<OfxCandidateView[]> {
+    return this.tx.runAs(actorId, async () => {
+      const imp = await this.mustFindImport(importId);
+      const entry = await this.repo.findEntry(importId, entryId);
+      if (!entry) throw new NotFoundError('Linha do extrato não encontrada.');
+      const open = await this.transactions.findReconcilable(
+        imp.walletId,
+        shiftDays(entry.postedAt, -PICKER_MARGIN_DAYS),
+        shiftDays(entry.postedAt, PICKER_MARGIN_DAYS),
+      );
+      const ranked = rankCandidates(
+        entry,
+        open.map((t) => ({ id: t.id, signedCents: signed(t), dueDate: t.dueDate, t })),
+      );
+      return ranked.slice(0, PICKER_LIMIT).map(({ t, score }) => ({
+        id: t.id,
+        description: t.description,
+        amountCents: t.amountCents,
+        kind: t.kind,
+        dueDate: t.dueDate,
+        score,
+      }));
     });
   }
 

@@ -108,3 +108,39 @@ describe('OFX: conciliação', () => {
     await stranger.upload('/ofx/imports', { ...extrato, name: 'outro.ofx' }, { walletId: wallet.id }).expect(404);
   });
 });
+
+describe('OFX: Escolher outro', () => {
+  it('lista os lançamentos em aberto da conta e vincula o escolhido no lugar da sugestão', async () => {
+    const { api, budget, wallet, mercado } = await scenario();
+    // Um lançamento fora da janela da sugestão automática (20 dias depois), mas que é o certo.
+    const outro = (
+      await api
+        .post(`/budgets/${budget.id}/transactions`, {
+          walletId: wallet.id,
+          description: 'Mercado · compra do mês',
+          amountCents: 49_000,
+          kind: 'expense',
+          dueDate: '2026-10-24',
+        })
+        .expect(201)
+    ).body.transaction;
+
+    const imp = (await api.upload('/ofx/imports', extrato, { walletId: wallet.id }).expect(201)).body;
+    const entry = byFitid(imp.entries, '2026100401');
+    const base = `/ofx/imports/${imp.import.id}/entries/${entry.id}`;
+
+    const { candidates } = (await api.get(`${base}/candidates`).expect(200)).body;
+    const ids = candidates.map((c: { id: string }) => c.id);
+    expect(ids[0]).toBe(mercado.id); // a sugestão continua em primeiro
+    expect(ids).toContain(outro.id);
+    expect(candidates.every((c: { kind: string }) => c.kind === 'expense')).toBe(true);
+
+    await api.post(`${base}/confirm`, { transactionId: outro.id }).expect(200);
+    const txs = (await api.get(`/budgets/${budget.id}/transactions`).expect(200)).body.transactions;
+    expect(txs.find((t: { id: string }) => t.id === outro.id)).toMatchObject({ status: 'paid', amountCents: 48_672 });
+    expect(txs.find((t: { id: string }) => t.id === mercado.id)).toMatchObject({ status: 'open' });
+
+    // outra pessoa não enxerga os candidatos
+    await h.as(await h.newUser('intruso')).get(`${base}/candidates`).expect(404);
+  });
+});

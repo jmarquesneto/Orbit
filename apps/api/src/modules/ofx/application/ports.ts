@@ -45,6 +45,7 @@ export interface OfxRepository {
   setImportStatus(id: string, status: 'review' | 'done'): Promise<void>;
   createEntries(rows: Omit<OfxEntryRecord, 'id'>[]): Promise<OfxEntryRecord[]>;
   listEntries(importId: string): Promise<OfxEntryRecord[]>;
+  findEntry(importId: string, entryId: string): Promise<OfxEntryRecord | null>;
   findEntryForUpdate(importId: string, entryId: string): Promise<OfxEntryRecord | null>;
   resolveEntry(id: string, resolution: OfxResolution, transactionId: string | null): Promise<void>;
 }

@@ -1,4 +1,4 @@
-import { matchScore, reconcile } from './matching.js';
+import { matchScore, rankCandidates, reconcile } from './matching.js';
 import { parseAmountCents, parseOfxDate, sanitizeText } from './statement.js';
 
 describe('normalização do OFX', () => {
@@ -67,5 +67,22 @@ describe('conciliação', () => {
     expect(results.map((r) => r.match)).toEqual(['auto', 'suggest', 'new', 'dup', 'dup', 'new']);
     expect(results[0]).toMatchObject({ transactionId: 'seguro', score: 100 });
     expect(results[1]?.transactionId).toBe('mercado');
+  });
+});
+
+describe('Escolher outro (ranking de candidatos)', () => {
+  const entry = { amountCents: -12_000, postedAt: '2026-10-10' };
+
+  it('ordena pela nota e, abaixo do limiar, pela proximidade de valor e data', () => {
+    const ranked = rankCandidates(entry, [
+      { id: 'longe', signedCents: -50_000, dueDate: '2026-09-01' },
+      { id: 'perto-valor', signedCents: -12_500, dueDate: '2026-10-30' },
+      { id: 'exato', signedCents: -12_000, dueDate: '2026-10-10' },
+      { id: 'mesmo-valor-longe', signedCents: -12_000, dueDate: '2026-11-15' },
+      { id: 'receita', signedCents: 12_000, dueDate: '2026-10-10' },
+    ]);
+    expect(ranked.map((c) => c.id)).toEqual(['exato', 'mesmo-valor-longe', 'perto-valor', 'longe']);
+    expect(ranked[0]!.score).toBe(100);
+    expect(ranked.at(-1)!.score).toBe(0);
   });
 });

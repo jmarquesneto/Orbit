@@ -83,3 +83,24 @@ export function reconcile(
   }
   return results;
 }
+
+/**
+ * Ordena os lançamentos para o "Escolher outro": primeiro pela nota; empatados (inclusive
+ * os de nota 0, longe demais para sugestão automática) pela diferença de valor e depois de
+ * data. Sentidos opostos ficam de fora: entrada só casa com receita, saída com despesa.
+ */
+export function rankCandidates<T extends MatchCandidate>(
+  entry: { amountCents: number; postedAt: IsoDate },
+  candidates: T[],
+): (T & { score: number })[] {
+  const amountGap = (c: MatchCandidate) => Math.abs(Math.abs(entry.amountCents) - Math.abs(c.signedCents));
+  return candidates
+    .filter((c) => Math.sign(c.signedCents) === Math.sign(entry.amountCents))
+    .map((c) => ({ ...c, score: matchScore(entry, c) }))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        amountGap(a) - amountGap(b) ||
+        daysBetween(entry.postedAt, a.dueDate) - daysBetween(entry.postedAt, b.dueDate),
+    );
+}

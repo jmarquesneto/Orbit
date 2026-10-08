@@ -53,6 +53,14 @@ export class DrizzleOfxRepository implements OfxRepository {
       .orderBy(asc(ofxEntries.postedAt), asc(ofxEntries.fitid));
   }
 
+  async findEntry(importId: string, entryId: string): Promise<OfxEntryRecord | null> {
+    const [row] = await this.ctx.db
+      .select()
+      .from(ofxEntries)
+      .where(and(eq(ofxEntries.id, entryId), eq(ofxEntries.importId, importId)));
+    return row ?? null;
+  }
+
   async findEntryForUpdate(importId: string, entryId: string): Promise<OfxEntryRecord | null> {
     const [row] = await this.ctx.db
       .select()
