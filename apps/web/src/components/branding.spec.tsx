@@ -33,3 +33,55 @@ describe('white-label', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toBe('https://cdn.exemplo.com/logo.svg');
   });
 });
+
+describe('branding ao vivo', () => {
+  it('valida o evento recebido pela rede', async () => {
+    const { parseBrandingEvent } = await import('./branding');
+    expect(parseBrandingEvent('{"name":"Novo","accent":"#112233","logoUrl":null}')).toEqual({
+      name: 'Novo',
+      accent: '#112233',
+      logoUrl: null,
+    });
+    expect(parseBrandingEvent('{"name":"X","accent":"red","logoUrl":null}')).toBeNull();
+    expect(parseBrandingEvent('{"name":"X","accent":"#112233","logoUrl":"javascript:alert(1)"}')?.logoUrl).toBeNull();
+    expect(parseBrandingEvent('não é json')).toBeNull();
+  });
+
+  it('troca o nome no título da aba', async () => {
+    const { retitle } = await import('./branding');
+    expect(retitle('Carteiras · Antigo', 'Antigo', 'Novo')).toBe('Carteiras · Novo');
+    expect(retitle('Antigo', 'Antigo', 'Novo')).toBe('Novo');
+    expect(retitle('Outra coisa', 'Antigo', 'Novo')).toBe('Outra coisa');
+  });
+
+  it('atualiza o menu quando chega um evento, sem recarregar', async () => {
+    const { act } = await import('@testing-library/react');
+    const listeners: ((e: MessageEvent<string>) => void)[] = [];
+    class FakeEventSource {
+      constructor(readonly url: string) {}
+      addEventListener(_type: string, fn: (e: MessageEvent<string>) => void) {
+        listeners.push(fn);
+      }
+      close() {}
+    }
+    const original = globalThis.EventSource;
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
+    try {
+      render(
+        <BrandingProvider value={{ name: 'Antigo', accent: '#3DD6C3', logoUrl: null }}>
+          <Brand />
+        </BrandingProvider>,
+      );
+      expect(screen.getByText('Antigo')).toBeTruthy();
+      act(() => {
+        for (const fn of listeners) {
+          fn({ data: '{"name":"Novo Nome","accent":"#FF8800","logoUrl":null}' } as MessageEvent<string>);
+        }
+      });
+      expect(screen.getByText('Novo Nome')).toBeTruthy();
+      expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#FF8800');
+    } finally {
+      globalThis.EventSource = original;
+    }
+  });
+});

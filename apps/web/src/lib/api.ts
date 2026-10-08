@@ -2,6 +2,7 @@
  * Cliente HTTP do navegador. Fala só com a própria origem (/api/* é repassado à API),
  * então os cookies httpOnly da sessão vão sozinhos — o JavaScript nunca toca nos tokens.
  * Em 401, tenta renovar a sessão UMA vez (refresh rotativo) e repete a chamada.
+ * Em 403 "mfa_reauth_required" (ação sensível), pede o código do app autenticador e repete.
  */
 
 export interface ApiIssue {
@@ -21,6 +22,24 @@ export class ApiError extends Error {
 }
 
 let refreshing: Promise<boolean> | null = null;
+
+/** Quem pergunta o código do MFA (o AppShell registra um diálogo). true = confirmado. */
+type ReauthHandler = () => Promise<boolean>;
+let reauthHandler: ReauthHandler | null = null;
+let reauthing: Promise<boolean> | null = null;
+
+export function setReauthHandler(handler: ReauthHandler | null): void {
+  reauthHandler = handler;
+}
+
+function reauthenticate(): Promise<boolean> {
+  if (!reauthHandler) return Promise.resolve(false);
+  // Várias chamadas ao mesmo tempo compartilham um único pedido de código.
+  reauthing ??= reauthHandler().finally(() => {
+    reauthing = null;
+  });
+  return reauthing;
+}
 
 function refreshSession(): Promise<boolean> {
   refreshing ??= fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
@@ -48,7 +67,12 @@ async function toError(res: Response): Promise<ApiError> {
 
 type Body = Record<string, unknown> | FormData | undefined;
 
-export async function api<T>(path: string, init: { method?: string; body?: Body } = {}, retry = true): Promise<T> {
+export async function api<T>(
+  path: string,
+  init: { method?: string; body?: Body } = {},
+  retry = true,
+  reauth = true,
+): Promise<T> {
   const isForm = init.body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     method: init.method ?? (init.body ? 'POST' : 'GET'),
@@ -58,9 +82,15 @@ export async function api<T>(path: string, init: { method?: string; body?: Body 
   });
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
-    if (await refreshSession()) return api<T>(path, init, false);
+    if (await refreshSession()) return api<T>(path, init, false, reauth);
   }
-  if (!res.ok) throw await toError(res);
+  if (!res.ok) {
+    const err = await toError(res);
+    if (err.code === 'mfa_reauth_required' && reauth && (await reauthenticate())) {
+      return api<T>(path, init, retry, false);
+    }
+    throw err;
+  }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }

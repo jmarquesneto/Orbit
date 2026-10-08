@@ -568,3 +568,55 @@ textarea.input {
   justify-content: center;
   padding: 0;
 }
+
+/* ------------------------------------------------------------ diálogos e MFA */
+dialog.modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+dialog.modal::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+dialog.modal > form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+.code-input {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+.qr {
+  align-self: center;
+  width: 200px;
+  height: 200px;
+  padding: 10px;
+  background: #fff;
+  border-radius: 8px;
+}
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  padding: 14px;
+  margin: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+.secret {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -184,7 +184,9 @@ export class OfxService {
       const entries = await this.repo.listEntries(importId);
       const views: OfxEntryView[] = [];
       for (const e of entries) {
-        const s = e.suggestedTransactionId ? await this.transactions.findById(e.suggestedTransactionId) : null;
+        // Vinculada: mostra o lançamento escolhido (pode não ser o sugerido, via "Escolher outro").
+        const shownId = e.resolution === 'linked' ? e.transactionId : e.suggestedTransactionId;
+        const s = shownId ? await this.transactions.findById(shownId) : null;
         views.push({
           ...e,
           suggestion: s ? { id: s.id, description: s.description, amountCents: s.amountCents, dueDate: s.dueDate } : null,

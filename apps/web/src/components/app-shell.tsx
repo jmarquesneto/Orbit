@@ -8,6 +8,7 @@ import { api, ApiError, post } from '@/lib/api';
 import type { Me } from '@/lib/types';
 import { Brand } from './branding';
 import { Icon, type IconName } from './icons';
+import { MfaEnrollment, ReauthDialog } from './mfa';
 
 const NAV: { href: string; label: string; icon: IconName; admin?: boolean }[] = [
   { href: '/', label: 'Visão geral', icon: 'overview' },
@@ -17,6 +18,7 @@ const NAV: { href: string; label: string; icon: IconName; admin?: boolean }[] = 
   { href: '/faturas', label: 'Faturas', icon: 'card' },
   { href: '/caixinhas', label: 'Caixinhas', icon: 'goal' },
   { href: '/ofx', label: 'Conciliação OFX', icon: 'ofx' },
+  { href: '/seguranca', label: 'Segurança', icon: 'lock' },
   { href: '/admin', label: 'Administração', icon: 'shield', admin: true },
 ];
 
@@ -61,6 +63,25 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }
 
+  // Instalação exige MFA e esta conta ainda não cadastrou: nada além do cadastro.
+  if (me.data.mfaRequired && !me.data.mfaEnabled) {
+    return (
+      <main className="auth-page">
+        <section className="auth-card" aria-labelledby="h-mfa" style={{ maxWidth: 460 }}>
+          <Brand />
+          <h1 id="h-mfa" style={{ fontSize: 22, textAlign: 'center' }}>Proteja sua conta</h1>
+          <p className="small muted" style={{ margin: 0, textAlign: 'center' }}>
+            Esta instalação exige verificação em duas etapas. Leva um minuto e só precisa ser feito uma vez.
+          </p>
+          <MfaEnrollment onDone={() => void queryClient.invalidateQueries()} />
+          <button type="button" className="btn small" onClick={logout} style={{ alignSelf: 'center' }}>
+            Sair
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <MeContext.Provider value={me.data}>
       <div className="shell">
@@ -86,6 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="page">{children}</div>
         </main>
       </div>
+      <ReauthDialog />
     </MeContext.Provider>
   );
 }

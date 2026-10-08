@@ -2,9 +2,10 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { BudgetPicker } from '@/components/budget-picker';
+import { TransferForm } from '@/components/transfers';
 import { Empty, ErrorAlert, PageHeader } from '@/components/ui';
 import { errorMessage, post } from '@/lib/api';
 import { isoToBr, money, monthLabel, parseMoneyInput, todayIso } from '@/lib/format';
@@ -33,7 +34,9 @@ export function NewTransactionScreen() {
   const queryClient = useQueryClient();
   const budgets = useBudgets();
   const wallets = useWallets();
+  const params = useSearchParams();
 
+  const [transfer, setTransfer] = useState(params.get('tipo') === 'transferencia');
   const [kind, setKind] = useState<'expense' | 'income'>('expense');
   const [description, setDescription] = useState('');
   const [amountText, setAmountText] = useState('');
@@ -107,6 +110,49 @@ export function NewTransactionScreen() {
     }
   }
 
+  const switcher = (
+    <div className="segmented" role="group" aria-label="Tipo de lançamento">
+      <button
+        type="button"
+        className="expense"
+        aria-pressed={!transfer && kind === 'expense'}
+        onClick={() => {
+          setTransfer(false);
+          setKind('expense');
+        }}
+      >
+        Despesa
+      </button>
+      <button
+        type="button"
+        className="income"
+        aria-pressed={!transfer && kind === 'income'}
+        onClick={() => {
+          setTransfer(false);
+          setKind('income');
+        }}
+      >
+        Receita
+      </button>
+      <button type="button" aria-pressed={transfer} onClick={() => setTransfer(true)}>
+        Transferência
+      </button>
+    </div>
+  );
+  const eyebrow = <><Link href="/" className="muted">Visão geral</Link> / Lançamentos / Novo</>;
+
+  if (transfer) {
+    return (
+      <>
+        <PageHeader eyebrow={eyebrow} title="Nova transferência" />
+        <div className="card" style={{ gap: 24, maxWidth: 820 }}>
+          {switcher}
+          {wallets.data && <TransferForm wallets={wallets.data} />}
+        </div>
+      </>
+    );
+  }
+
   if (budgets.data && !writable.length) {
     return (
       <>
@@ -137,19 +183,9 @@ export function NewTransactionScreen() {
 
   return (
     <>
-      <PageHeader eyebrow={<><Link href="/" className="muted">Visão geral</Link> / Lançamentos / Novo</>} title="Novo lançamento" />
+      <PageHeader eyebrow={eyebrow} title="Novo lançamento" />
       <form className="card" style={{ gap: 24, maxWidth: 820 }} onSubmit={onSubmit}>
-        <div className="segmented" role="group" aria-label="Tipo de lançamento">
-          <button type="button" className="expense" aria-pressed={kind === 'expense'} onClick={() => setKind('expense')}>
-            Despesa
-          </button>
-          <button type="button" className="income" aria-pressed={kind === 'income'} onClick={() => setKind('income')}>
-            Receita
-          </button>
-          <button type="button" disabled title="Em breve">
-            Transferência
-          </button>
-        </div>
+        {switcher}
 
         <div className="form-grid" style={{ ['--min' as string]: '220px' }}>
           <label className="field">

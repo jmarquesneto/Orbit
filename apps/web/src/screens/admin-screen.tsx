@@ -55,7 +55,7 @@ function Identity() {
     },
     onSuccess: (version) => {
       setError(null);
-      setSaved(`Publicado como versão ${version}. O novo nome já aparece em todas as telas.`);
+      setSaved(`Publicado como versão ${version}. O novo nome já aparece em todas as telas e abas abertas.`);
       // Re-renderiza o layout no servidor, que lê o branding atualizado.
       router.refresh();
     },
@@ -167,10 +167,50 @@ function Identity() {
           <span className="text-2" style={{ fontWeight: 500 }}>Ao publicar</span>
           <span>1. Grava <span className="mono" style={{ color: 'var(--text)' }}>app.name</span> em system_settings, com revisão e auditoria.</span>
           <span>2. Limpa o cache de branding no servidor.</span>
-          <span>3. Esta e as próximas páginas já usam o novo nome.</span>
+          <span>3. Todas as abas abertas trocam o nome na hora, sem recarregar.</span>
         </div>
       </section>
     </div>
+  );
+}
+
+function SecurityPolicy() {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const settings = useQuery({
+    queryKey: ['admin-settings'],
+    queryFn: () => api<{ settings: { key: string; value: unknown }[] }>('/admin/settings').then((r) => r.settings),
+  });
+  const required = settings.data?.find((s) => s.key === 'security.mfa_required')?.value === true;
+  const toggle = useMutation({
+    mutationFn: (value: boolean) => patch('/admin/settings/security.mfa_required', { value }),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  return (
+    <section className="card" aria-labelledby="h-sec">
+      <h2 id="h-sec" style={{ fontSize: 18 }}>Segurança</h2>
+      <ErrorAlert error={error} />
+      <label className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <input
+          type="checkbox"
+          checked={required}
+          disabled={!settings.data || toggle.isPending}
+          onChange={(e) => toggle.mutate(e.target.checked)}
+          style={{ marginTop: 4 }}
+        />
+        <span className="stack-sm" style={{ gap: 2 }}>
+          <span>Exigir verificação em duas etapas de todos os usuários</span>
+          <span className="small muted">
+            Quem ainda não ativou será levado ao cadastro do app autenticador no próximo acesso.
+          </span>
+        </span>
+      </label>
+    </section>
   );
 }
 
@@ -301,6 +341,14 @@ function Users() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
     onError: (e) => setError(errorMessage(e)),
   });
+  const resetMfa = useMutation({
+    mutationFn: (id: string) => post(`/admin/users/${id}/mfa/reset`),
+    onSuccess: () => {
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
   return (
     <section className="card" aria-labelledby="h-users">
       <h2 id="h-users" style={{ fontSize: 18 }}>Usuários</h2>
@@ -312,6 +360,7 @@ function Users() {
               <th scope="col">E-mail</th>
               <th scope="col">Papel</th>
               <th scope="col">Último acesso</th>
+              <th scope="col">2 etapas</th>
               <th scope="col">Status</th>
               <th scope="col"><span className="sr-only">Ações</span></th>
             </tr>
@@ -322,8 +371,23 @@ function Users() {
                 <td>{u.email}</td>
                 <td>{u.role === 'admin' ? 'Administrador' : 'Usuário'}</td>
                 <td className="mono">{u.lastLoginAt ? isoToBr(u.lastLoginAt) : '—'}</td>
+                <td><span className={`badge ${u.mfaEnabled ? 'ok' : ''}`}>{u.mfaEnabled ? 'Ativa' : 'Não'}</span></td>
                 <td><span className={`badge ${u.status === 'active' ? 'ok' : 'warn'}`}>{u.status === 'active' ? 'Ativo' : 'Bloqueado'}</span></td>
                 <td style={{ textAlign: 'right' }}>
+                  {u.id !== me.id && u.mfaEnabled && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      style={{ marginRight: 8 }}
+                      onClick={() => {
+                        if (window.confirm(`Redefinir a verificação em duas etapas de ${u.email}? A pessoa sai de todos os dispositivos e cadastra o app de novo no próximo login.`)) {
+                          resetMfa.mutate(u.id);
+                        }
+                      }}
+                    >
+                      Redefinir 2 etapas
+                    </button>
+                  )}
                   {u.id !== me.id && (
                     <button
                       type="button"
@@ -355,6 +419,7 @@ export function AdminScreen() {
         <span className="small muted">Valem para todos os usuários desta instalação</span>
       </PageHeader>
       <Identity />
+      <SecurityPolicy />
       <Invitations />
       <Users />
     </>

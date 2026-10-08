@@ -9,7 +9,7 @@ import { Empty, ErrorAlert, PageHeader } from '@/components/ui';
 import { api, errorMessage, post } from '@/lib/api';
 import { isoToBr, isoToShort, money, signedMoney } from '@/lib/format';
 import { useBudgets, useWallets } from '@/lib/queries';
-import type { OfxEntry, OfxImportView } from '@/lib/types';
+import type { OfxCandidate, OfxEntry, OfxImportView } from '@/lib/types';
 
 type Filter = 'all' | 'ok' | 'suggest' | 'new' | 'other';
 
@@ -153,25 +153,100 @@ function Upload({ onImported }: { onImported: (v: OfxImportView) => void }) {
   );
 }
 
+/** "Escolher outro": lançamentos em aberto desta conta, do mais provável ao menos provável. */
+function CandidatePicker({
+  importId,
+  entry,
+  busy,
+  onPick,
+  onCancel,
+}: {
+  importId: string;
+  entry: OfxEntry;
+  busy: boolean;
+  onPick: (transactionId: string) => void;
+  onCancel: () => void;
+}) {
+  const candidates = useQuery({
+    queryKey: ['ofx-candidates', importId, entry.id],
+    queryFn: () =>
+      api<{ candidates: OfxCandidate[] }>(`/ofx/imports/${importId}/entries/${entry.id}/candidates`).then((r) => r.candidates),
+  });
+  const list = candidates.data ?? [];
+  return (
+    <div className="stack-sm" style={{ flex: '1 1 100%', padding: 14, background: 'var(--surface-2)', border: '1px solid var(--border-strong)', borderRadius: 10 }}>
+      <div className="between">
+        <span className="small text-2">
+          Qual lançamento é este {entry.amountCents < 0 ? 'pagamento' : 'recebimento'} de {money(Math.abs(entry.amountCents))}?
+        </span>
+        <button type="button" className="btn link small" onClick={onCancel}>Fechar</button>
+      </div>
+      {candidates.isLoading ? (
+        <span className="small muted" role="status">Procurando lançamentos…</span>
+      ) : candidates.error ? (
+        <ErrorAlert error={errorMessage(candidates.error)} />
+      ) : !list.length ? (
+        <span className="small muted">
+          Nenhum lançamento em aberto nesta conta perto dessa data (±45 dias). Use “Criar lançamento”.
+        </span>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Lançamentos em aberto">
+          {list.map((c) => {
+            const diff = Math.abs(entry.amountCents) - c.amountCents;
+            return (
+              <li key={c.id} className="row" style={{ gap: 12, padding: '8px 0', borderTop: '1px solid var(--border-row)' }}>
+                <span className="mono small muted">{isoToShort(c.dueDate)}</span>
+                <span className="stack-sm" style={{ flex: '1 1 200px', gap: 0, minWidth: 0 }}>
+                  <span style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{c.description}</span>
+                  <span className="xsmall muted">
+                    {money(c.amountCents)}
+                    {diff === 0 ? ' · valor idêntico' : ` · difere ${money(Math.abs(diff))}`}
+                    {c.score > 0 ? ` · ${c.score}% de confiança` : ''}
+                    {c.id === entry.suggestion?.id ? ' · sugerido' : ''}
+                  </span>
+                </span>
+                <button type="button" className="btn small" disabled={busy} onClick={() => onPick(c.id)}>
+                  Usar este
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Review({ view, onChange, onClose }: { view: OfxImportView; onChange: (v: OfxImportView) => void; onClose: () => void }) {
   const queryClient = useQueryClient();
   const budgets = useBudgets();
   const [filter, setFilter] = useState<Filter>('all');
   const [budgetId, setBudgetId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
   const writable = (budgets.data ?? []).filter((b) => b.role === 'owner' || b.role === 'create');
   useEffect(() => {
     if (!budgetId && writable[0]) setBudgetId(writable[0].id);
   }, [writable, budgetId]);
 
   const act = useMutation({
-    mutationFn: ({ entry, action }: { entry: OfxEntry; action: 'confirm' | 'create' | 'ignore' | 'undo' }) =>
+    mutationFn: ({
+      entry,
+      action,
+      transactionId,
+    }: {
+      entry: OfxEntry;
+      action: 'confirm' | 'create' | 'ignore' | 'undo';
+      transactionId?: string;
+    }) =>
       post<OfxImportView>(
         `/ofx/imports/${view.import.id}/entries/${entry.id}/${action}`,
-        action === 'create' ? { budgetId } : {},
+        action === 'create' ? { budgetId } : transactionId ? { transactionId } : {},
       ),
     onSuccess: (v) => {
       setError(null);
+      setPicking(null);
+      void queryClient.invalidateQueries({ queryKey: ['ofx-candidates'] });
       onChange(v);
       void queryClient.invalidateQueries({ queryKey: ['wallets'] });
       void queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -251,7 +326,7 @@ function Review({ view, onChange, onClose }: { view: OfxImportView; onChange: (v
           const [title, sub] = matchText(e);
           const done = e.resolution !== 'pending';
           return (
-            <div key={e.id} className="row" style={{ gap: 16, padding: '16px 20px', borderBottom: '1px solid var(--border-row)' }}>
+            <div key={e.id} className="row" style={{ gap: 16, padding: '16px 20px', borderBottom: '1px solid var(--border-row)', flexWrap: 'wrap' }}>
               <div className="row" style={{ flex: '1 1 300px', minWidth: 0, gap: 14, alignItems: 'flex-start' }}>
                 <span className="mono small muted" style={{ paddingTop: 2 }}>{isoToShort(e.postedAt)}</span>
                 <div className="stack-sm" style={{ gap: 2, minWidth: 0 }}>
@@ -268,12 +343,18 @@ function Review({ view, onChange, onClose }: { view: OfxImportView; onChange: (v
                 {!done && e.match === 'suggest' && (
                   <>
                     <button type="button" className="btn small" onClick={() => act.mutate({ entry: e, action: 'ignore' })}>Ignorar</button>
+                    <button type="button" className="btn small" aria-expanded={picking === e.id} onClick={() => setPicking(picking === e.id ? null : e.id)}>
+                      Escolher outro
+                    </button>
                     <button type="button" className="btn small primary" onClick={() => act.mutate({ entry: e, action: 'confirm' })}>Confirmar</button>
                   </>
                 )}
                 {!done && e.match === 'new' && (
                   <>
                     <button type="button" className="btn small" onClick={() => act.mutate({ entry: e, action: 'ignore' })}>Ignorar</button>
+                    <button type="button" className="btn small" aria-expanded={picking === e.id} onClick={() => setPicking(picking === e.id ? null : e.id)}>
+                      Vincular a existente
+                    </button>
                     <button type="button" className="btn small primary" disabled={!budgetId} onClick={() => act.mutate({ entry: e, action: 'create' })}>
                       Criar lançamento
                     </button>
@@ -283,6 +364,15 @@ function Review({ view, onChange, onClose }: { view: OfxImportView; onChange: (v
                   <button type="button" className="btn link" onClick={() => act.mutate({ entry: e, action: 'undo' })}>Desfazer</button>
                 )}
               </div>
+              {!done && picking === e.id && (
+                <CandidatePicker
+                  importId={view.import.id}
+                  entry={e}
+                  busy={act.isPending}
+                  onPick={(transactionId) => act.mutate({ entry: e, action: 'confirm', transactionId })}
+                  onCancel={() => setPicking(null)}
+                />
+              )}
             </div>
           );
         })}

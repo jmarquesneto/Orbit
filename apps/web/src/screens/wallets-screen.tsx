@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { TransfersList } from '@/components/transfers';
 import { Empty, ErrorAlert, Loading, PageHeader } from '@/components/ui';
 import { del, errorMessage, post } from '@/lib/api';
 import { money, parseMoneyInput } from '@/lib/format';
@@ -162,6 +163,7 @@ export function WalletsScreen() {
           Criar carteira
         </button>
       </form>
+      {accounts.length >= 2 && <TransfersList wallets={wallets.data ?? []} />}
     </>
   );
 }

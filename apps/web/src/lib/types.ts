@@ -7,6 +7,40 @@ export interface Me {
   id: string;
   email: string;
   role: 'admin' | 'user';
+  mfaEnabled: boolean;
+  /** A instalação exige MFA de todos (security.mfa_required). */
+  mfaRequired: boolean;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  required: boolean;
+  recoveryCodesLeft: number;
+}
+
+export interface MfaSetup {
+  otpauthUri: string;
+  secret: string;
+  qrCode: string;
+}
+
+export interface Transfer {
+  id: string;
+  fromWalletId: string;
+  toWalletId: string;
+  amountCents: number;
+  occurredOn: string;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface OfxCandidate {
+  id: string;
+  description: string;
+  amountCents: number;
+  kind: 'income' | 'expense' | 'xfer';
+  dueDate: string;
+  score: number;
 }
 
 export interface Budget {
@@ -149,6 +183,7 @@ export interface AdminUser {
   role: 'admin' | 'user';
   status: 'active' | 'locked';
   lastLoginAt: string | null;
+  mfaEnabled: boolean;
 }
 
 export const ROLE_LABEL: Record<Role, string> = {

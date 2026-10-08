@@ -31,12 +31,22 @@ docker compose run --rm api node dist/cli/create-admin.js voce@exemplo.com
 ```
 
 O comando mostra uma senha aleatória **uma única vez**. Abra <http://localhost:3000> (ou a
-porta do seu `.env`), entre com o e-mail e essa senha, e siga a ordem:
+porta do seu `.env`), entre com o e-mail e essa senha. No primeiro acesso o sistema pede para
+cadastrar a **verificação em duas etapas** (um app autenticador no celular, como Google
+Authenticator ou Microsoft Authenticator) e mostra 10 códigos de recuperação: guarde-os. Depois,
+siga a ordem:
 
 1. **Orçamentos** → crie um orçamento (ex.: "Pessoal") e as categorias com o valor planejado.
 2. **Carteiras** → cadastre sua conta, o dinheiro e os cartões (com os dias de fechamento e vencimento).
 3. **Novo lançamento** → registre receitas e despesas; no cartão, escolha o número de parcelas.
 4. **Administração** → troque o nome do sistema, a cor e gere convites para outras pessoas.
+
+Perdeu o celular **e** os códigos de recuperação? Outro administrador usa "Redefinir 2 etapas"
+na tela de Administração. Se for o único administrador:
+
+```sh
+docker compose run --rm api node dist/cli/reset-mfa.js voce@exemplo.com
+```
 
 ## Estrutura
 
@@ -106,6 +116,8 @@ docker compose -p finance-test -f docker-compose.test.yml down
 | Autenticação | Guard **global**: toda rota exige JWT, exceto as marcadas com `@Public()`. Access token de 15 min (HS256, emissor, audiência e algoritmo fixos) e refresh token opaco de 256 bits, guardado só como SHA-256. |
 | Sessão | Tokens em cookies `httpOnly` + `SameSite=Strict` (+ `Secure` quando o site é HTTPS). A cada renovação o refresh muda; se um refresh antigo reaparecer, a família inteira de sessões é revogada. Logout, bloqueio e troca de papel valem na hora, porque o guard confere a sessão e o papel no banco. |
 | Senhas | Argon2id (parâmetros OWASP), mínimo de 12 caracteres. Após 5 erros, a conta fica bloqueada por 15 min. Há limite de tentativas por IP e por e-mail (Redis), e o tempo de resposta não revela se o e-mail existe. |
+| Verificação em duas etapas | TOTP (RFC 6238, 6 dígitos, janela de ±30 s), obrigatória por padrão (`security.mfa_required`). O segredo é cifrado com AES-256-GCM (`DATA_ENCRYPTION_KEY`) e só é gravado depois que o primeiro código confere. Um código já usado não vale de novo. Há 10 códigos de recuperação de uso único, guardados só como hash. Com a senha certa, o login devolve um desafio de 5 min (no máximo 5 tentativas), e só o código o troca pela sessão. Códigos errados contam no mesmo bloqueio da senha. |
+| Ações sensíveis | Publicar configurações, criar convites, bloquear usuários e redefinir o MFA de alguém exigem o código confirmado nos últimos 5 minutos nesta sessão. Fora dessa janela, a tela pede o código e repete a ação. |
 | Papéis | `admin` e `user`. `@Roles('admin')` protege todo o `/api/admin/*`. |
 | Convites | Token de 256 bits, guardado só como hash, com validade (padrão de 72 h, configurável) e uso único, consumido numa transação. O link usa `#token`, que não vai para logs nem para o Referer. Qualquer falha devolve a mesma resposta neutra. |
 | SQL injection | Todo acesso ao banco passa pelo Drizzle, com consultas parametrizadas. A API usa um papel do Postgres sem DDL. |
@@ -120,7 +132,13 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 | Método e rota | Acesso | O que faz |
 | --- | --- | --- |
 | `GET /api/branding` | público | nome, cor e logo (white-label) |
-| `POST /api/auth/login` | público | `{ email, password }` → cookies de sessão |
+| `GET /api/branding/events` | público | SSE: novo nome, cor e logo assim que o admin publica |
+| `POST /api/auth/login` | público | `{ email, password }` → cookies de sessão, ou `{ mfaRequired, challenge }` |
+| `POST /api/auth/mfa/verify` | público | `{ challenge, code }` → cookies de sessão (código do app ou de recuperação) |
+| `GET /api/auth/mfa` | logado | situação do MFA e códigos de recuperação restantes |
+| `POST /api/auth/mfa/setup` · `/enable` | logado | QR code e segredo / `{ code }` ativa e devolve os códigos de recuperação |
+| `POST /api/auth/mfa/reauth` | logado | `{ code }` libera ações sensíveis por 5 min |
+| `POST /api/auth/mfa/recovery-codes` · `/disable` | logado | `{ code }` gera novos códigos / desativa (se não for obrigatório) |
 | `POST /api/auth/refresh` | público (cookie) | renova a sessão |
 | `POST /api/auth/logout` | logado | encerra a sessão |
 | `GET /api/auth/me` | logado | usuário atual |
@@ -133,6 +151,7 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 | `DELETE /api/admin/invitations/:id` | admin | revoga um convite pendente |
 | `GET /api/admin/users` | admin | lista os usuários |
 | `PATCH /api/admin/users/:id/status` | admin | `{ status: "active" \| "locked" }` |
+| `POST /api/admin/users/:id/mfa/reset` | admin | desativa o MFA da pessoa e encerra as sessões dela |
 | `GET /api/health/live` · `/ready` | público | saúde da API |
 
 ## Telas
@@ -140,11 +159,14 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 Seguem o canvas de design do projeto (tema escuro, IBM Plex, cor de destaque configurável):
 **Login** e **Convite** (públicas); **Visão geral**, **Lançamentos** (lista e novo, com
 parcelamento), **Orçamentos** (planejado x realizado, categorias e compartilhamento),
-**Carteiras**, **Faturas** (pagar e cancelar compra), **Caixinhas**, **Conciliação OFX** e
+**Carteiras** (com transferências entre contas), **Faturas** (pagar e cancelar compra),
+**Caixinhas**, **Conciliação OFX** (com "Escolher outro"), **Segurança** (verificação em duas etapas) e
 **Administração** (identidade visual com pré-visualização, convites e usuários).
 
 - **White-label:** o layout raiz lê `GET /api/branding` no servidor a cada requisição. Nome,
-  cor e logo entram no `<title>`, no manifest do app, no menu, no login e no convite. Uma regra
+  cor e logo entram no `<title>`, no manifest do app, no menu, no login e no convite. As abas
+  já abertas ouvem `GET /api/branding/events` (Server-Sent Events via pub/sub do Redis) e trocam
+  nome, cor e título na hora, sem recarregar. Uma regra
   de lint (`no-restricted-syntax`) proíbe escrever o nome de fábrica no código do frontend.
 - **Sessão:** o navegador nunca vê os tokens (cookies httpOnly). Num 401, o cliente renova a
   sessão uma vez e repete a chamada; se não der, volta para o login.
@@ -158,7 +180,8 @@ parcelamento), **Orçamentos** (planejado x realizado, categorias e compartilham
 | `POST /api/ofx/parse` | `multipart` com `file` → JSON padronizado do extrato (não grava nada) |
 | `POST /api/ofx/imports` | `file` + `walletId` → importa e concilia com os lançamentos em aberto |
 | `GET /api/ofx/imports[/:id]` | importações recentes / uma importação com as linhas |
-| `POST /api/ofx/imports/:id/entries/:eid/confirm` | confirma a sugestão (o valor do banco prevalece) |
+| `GET /api/ofx/imports/:id/entries/:eid/candidates` | "Escolher outro": lançamentos em aberto da conta (±45 dias), do mais provável ao menos provável |
+| `POST /api/ofx/imports/:id/entries/:eid/confirm` | confirma a sugestão ou `{ transactionId }` escolhido (o valor do banco prevalece) |
 | `POST /api/ofx/imports/:id/entries/:eid/create` | `{ budgetId, categoryId? }` → cria lançamento pago |
 | `POST /api/ofx/imports/:id/entries/:eid/ignore` · `/undo` | ignora / desfaz (o saldo volta) |
 | `POST /api/ofx/imports/:id/complete` | conclui a conciliação |
@@ -190,6 +213,7 @@ datas no formato `AAAA-MM-DD`.
 | `DELETE /api/wallets/:id/purchases/:planId` | cancela a compra parcelada inteira |
 | `GET /api/wallets/:id/invoices[/2026-11]` | faturas do cartão / uma fatura com as parcelas |
 | `POST /api/wallets/:id/invoices/2026-11/payment` | paga a fatura a partir de uma conta |
+| `POST · GET /api/transfers` · `DELETE /api/transfers/:id` | transferência entre contas suas (`{ fromWalletId, toWalletId, amountCents, occurredOn, description? }`) / lista / desfaz. Não conta como receita nem despesa |
 | `POST · GET /api/goals` · `POST /api/goals/:id/movements` | caixinhas: depósito e resgate a partir de uma carteira |
 | `POST /api/shares` · `GET /api/shares` · `DELETE /api/shares/:id` | compartilha orçamento ou caixinha por e-mail, com papel `read`, `edit` ou `create` |
 
