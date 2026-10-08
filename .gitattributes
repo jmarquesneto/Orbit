@@ -1,0 +1,9 @@
+# Força LF em tudo: no Windows, o git com autocrlf converteria para CRLF e os scripts
+# executados dentro dos containers Linux (ex.: initdb do Postgres) quebrariam.
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
