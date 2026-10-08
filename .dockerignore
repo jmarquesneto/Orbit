@@ -1,0 +1,17 @@
+# O contexto de build é a raiz do monorepo: envie só o necessário.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.git
+.github
+.env
+.env.*
+!.env.example
+**/*.pem
+**/*.key
+infra
+scripts
+docker-compose*.yml
+README.md

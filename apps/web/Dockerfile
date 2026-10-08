@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1.7
+# Contexto de build: raiz do monorepo (veja docker-compose.yml).
+
+ARG NODE_IMAGE=node:22-alpine
+
+# ---------- base ----------
+FROM ${NODE_IMAGE} AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    CI=true \
+    NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable
+WORKDIR /repo
+
+# ---------- deps ----------
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @app/web...
+
+# ---------- build: saída "standalone" do Next.js ----------
+FROM deps AS build
+COPY apps/web apps/web
+RUN pnpm --filter @app/web build
+
+# ---------- runtime ----------
+FROM ${NODE_IMAGE} AS runtime
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+# Sem npm/yarn/corepack em runtime: menos superfície de ataque. O PID 1 (init) vem do
+# `init: true` do compose, que repassa sinais e recolhe processos zumbis.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* \
+           /usr/local/bin/yarn /usr/local/bin/yarnpkg
+WORKDIR /app
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /repo/apps/web/public ./apps/web/public
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "apps/web/server.js"]

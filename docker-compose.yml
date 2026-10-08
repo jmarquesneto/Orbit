@@ -1,0 +1,153 @@
+# Topologia de rede (menor exposição possível):
+#
+#   host ──► web ──(backend)──► api ──(data)──► db
+#                                          └──► redis
+#
+#   - edge:    única rede com saída; só o "web" publica porta no host.
+#   - backend: interna (sem internet); liga web ↔ api.
+#   - data:    interna (sem internet); só api, db e redis. O banco nunca é alcançável pelo host
+#              nem pelo frontend.
+#
+# Todas as variáveis vêm do .env (gere com ./scripts/generate-env.sh). A sintaxe ${VAR:?}
+# faz o compose recusar subir se algo obrigatório estiver faltando.
+
+x-hardening: &hardening
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  web:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-finance}-web:local
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    networks:
+      - edge
+      - backend
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+
+  api:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-finance}-api:local
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_PORT: 4000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEB_ORIGIN: ${WEB_ORIGIN:?defina WEB_ORIGIN no .env}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?defina DB_NAME no .env}
+      DB_APP_USER: ${DB_APP_USER:?defina DB_APP_USER no .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?defina DB_APP_PASSWORD no .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET no .env}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-604800}
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?defina DATA_ENCRYPTION_KEY no .env}
+    networks:
+      - backend
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  db:
+    <<: *hardening
+    build:
+      context: infra/db
+    image: ${COMPOSE_PROJECT_NAME:-finance}-db:local
+    environment:
+      POSTGRES_DB: ${DB_NAME:?defina DB_NAME no .env}
+      POSTGRES_USER: ${DB_SUPERUSER:?defina DB_SUPERUSER no .env}
+      POSTGRES_PASSWORD: ${DB_SUPERUSER_PASSWORD:?defina DB_SUPERUSER_PASSWORD no .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:?defina DB_MIGRATOR_USER no .env}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?defina DB_MIGRATOR_PASSWORD no .env}
+      DB_APP_USER: ${DB_APP_USER:?defina DB_APP_USER no .env}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?defina DB_APP_PASSWORD no .env}
+    # O entrypoint oficial precisa ajustar donos de diretório e trocar para o usuário postgres.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - data
+    shm_size: 128mb
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  redis:
+    <<: *hardening
+    image: redis:7.4-alpine
+    user: redis
+    # A senha entra pela stdin (config "-"), não pela linha de comando visível em `ps`.
+    command:
+      - sh
+      - -c
+      - >-
+        printf 'requirepass %s\n' "$$REDIS_PASSWORD" |
+        exec redis-server - --appendonly yes --protected-mode yes
+        --rename-command FLUSHALL "" --rename-command FLUSHDB "" --rename-command DEBUG ""
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    networks:
+      - data
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  edge:
+  backend:
+    internal: true
+  data:
+    internal: true
+
+volumes:
+  db-data:
+  redis-data:

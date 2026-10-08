@@ -1,0 +1,23 @@
+# Dependências e builds
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Segredos — NUNCA versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Sistema / editores
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+npm-debug.log*
+pnpm-debug.log*
+next-env.d.ts
