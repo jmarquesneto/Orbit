@@ -145,6 +145,22 @@ describe('Segurança HTTP (guards, CSRF, validação)', () => {
   it('CSRF: POST com cookie e sem Origin/Referer → 403', () =>
     http().post('/public-write').set('Cookie', 'access_token=qualquer').expect(403));
 
+  it('mesma origem pelo proxy passa mesmo com WEB_ORIGIN diferente (ex.: outra porta)', async () => {
+    await http()
+      .post('/public-write')
+      .set('Origin', 'http://localhost:3010')
+      .set('X-Forwarded-Host', 'localhost:3010')
+      .expect(201);
+  });
+
+  it('CSRF: site malicioso não passa nem forjando X-Forwarded-Host diferente', async () => {
+    await http()
+      .post('/public-write')
+      .set('Origin', 'https://site-malicioso.com')
+      .set('X-Forwarded-Host', 'localhost:3010')
+      .expect(403);
+  });
+
   it('POST da própria origem passa; cliente sem cookie e sem Origin também', async () => {
     await http().post('/public-write').set('Origin', WEB_ORIGIN).expect(201);
     await http().post('/public-write').expect(201);
