@@ -22,16 +22,21 @@ Para apagar tudo, inclusive os dados: `docker compose down -v`.
 No Windows sem Git Bash, gere o `.env` com
 `powershell -ExecutionPolicy Bypass -File .\scripts\generate-env.ps1`.
 
-### Primeiro administrador
+### Primeiro acesso
 
-As migrações rodam sozinhas a cada `up` (serviço `migrate`). Depois, crie o admin:
+As migrações rodam sozinhas a cada `up` (serviço `migrate`). Crie o administrador uma vez:
 
 ```sh
 docker compose run --rm api node dist/cli/create-admin.js voce@exemplo.com
 ```
 
-O comando mostra uma senha aleatória **uma única vez**. Com ela você entra pelo
-`POST /api/auth/login`. A tela de login chega junto com o frontend.
+O comando mostra uma senha aleatória **uma única vez**. Abra <http://localhost:3000> (ou a
+porta do seu `.env`), entre com o e-mail e essa senha, e siga a ordem:
+
+1. **Orçamentos** → crie um orçamento (ex.: "Pessoal") e as categorias com o valor planejado.
+2. **Carteiras** → cadastre sua conta, o dinheiro e os cartões (com os dias de fechamento e vencimento).
+3. **Novo lançamento** → registre receitas e despesas; no cartão, escolha o número de parcelas.
+4. **Administração** → troque o nome do sistema, a cor e gere convites para outras pessoas.
 
 ## Estrutura
 
@@ -129,6 +134,41 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 | `GET /api/admin/users` | admin | lista os usuários |
 | `PATCH /api/admin/users/:id/status` | admin | `{ status: "active" \| "locked" }` |
 | `GET /api/health/live` · `/ready` | público | saúde da API |
+
+## Telas
+
+Seguem o canvas de design do projeto (tema escuro, IBM Plex, cor de destaque configurável):
+**Login** e **Convite** (públicas); **Visão geral**, **Lançamentos** (lista e novo, com
+parcelamento), **Orçamentos** (planejado x realizado, categorias e compartilhamento),
+**Carteiras**, **Faturas** (pagar e cancelar compra), **Caixinhas**, **Conciliação OFX** e
+**Administração** (identidade visual com pré-visualização, convites e usuários).
+
+- **White-label:** o layout raiz lê `GET /api/branding` no servidor a cada requisição. Nome,
+  cor e logo entram no `<title>`, no manifest do app, no menu, no login e no convite. Uma regra
+  de lint (`no-restricted-syntax`) proíbe escrever o nome de fábrica no código do frontend.
+- **Sessão:** o navegador nunca vê os tokens (cookies httpOnly). Num 401, o cliente renova a
+  sessão uma vez e repete a chamada; se não der, volta para o login.
+- **CSP com nonce** por requisição (`middleware.ts`), sem `dangerouslySetInnerHTML`, fontes
+  hospedadas localmente (sem Google Fonts em tempo de execução).
+
+## API (Bloco 4, importação OFX)
+
+| Método e rota | O que faz |
+| --- | --- |
+| `POST /api/ofx/parse` | `multipart` com `file` → JSON padronizado do extrato (não grava nada) |
+| `POST /api/ofx/imports` | `file` + `walletId` → importa e concilia com os lançamentos em aberto |
+| `GET /api/ofx/imports[/:id]` | importações recentes / uma importação com as linhas |
+| `POST /api/ofx/imports/:id/entries/:eid/confirm` | confirma a sugestão (o valor do banco prevalece) |
+| `POST /api/ofx/imports/:id/entries/:eid/create` | `{ budgetId, categoryId? }` → cria lançamento pago |
+| `POST /api/ofx/imports/:id/entries/:eid/ignore` · `/undo` | ignora / desfaz (o saldo volta) |
+| `POST /api/ofx/imports/:id/complete` | conclui a conciliação |
+
+O arquivo (OFX 1.x/SGML ou 2.x/XML, até 5 MB, só em memória) é lido pela biblioteca
+**ofx-js** numa *worker thread* sem acesso às variáveis de ambiente, com limite de memória e
+tempo. DOCTYPE e ENTITY são recusados (sem XXE). O JSON padronizado traz valores em centavos,
+datas ISO, textos saneados e a conta mascarada (4 últimos dígitos). A conciliação pontua cada
+linha por valor e data: **automática** (idêntica, aplicada sozinha), **sugestão**, **nova** ou
+**duplicada** (FITID já importado). O mesmo arquivo nunca entra duas vezes na mesma conta.
 
 ## API (Bloco 3, motor financeiro)
 
