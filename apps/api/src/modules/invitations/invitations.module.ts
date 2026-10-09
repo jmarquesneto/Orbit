@@ -25,7 +25,7 @@ import {
       inject: [ENV],
       // O token vai no fragmento (#): navegadores não o enviam ao servidor nem no Referer.
       useFactory: (env: Env): InvitationLinkBuilder => ({
-        build: (token) => `${new URL(env.WEB_ORIGIN).origin}/convite#${token}`,
+        build: (token, origin) => `${origin ?? new URL(env.WEB_ORIGIN).origin}/convite#${token}`,
       }),
     },
     InvitationsService,

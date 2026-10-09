@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import {
@@ -10,7 +11,7 @@ import {
 } from '../../../shared/application/ports.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../../shared/domain/errors.js';
 import { generateSecureToken } from '../../../shared/domain/secure-token.js';
-import { toUserView, type UserStatus, type UserView } from '../domain/user.js';
+import { PersonNameSchema, toUserView, type UserStatus, type UserView } from '../domain/user.js';
 import {
   PASSWORD_HASHER,
   type PasswordHasher,
@@ -56,13 +57,41 @@ export class UsersAdminService {
   }
 
   /**
+   * Para quem esqueceu a senha: gera uma senha provisória (mostrada uma vez ao admin, que a
+   * repassa à pessoa), destrava a conta e derruba as sessões. No próximo acesso a pessoa é
+   * obrigada a criar uma senha nova. O MFA continua valendo.
+   */
+  async resetPassword(
+    actorId: string,
+    userId: string,
+    ip: string | null,
+  ): Promise<{ user: UserView; temporaryPassword: string }> {
+    if (actorId === userId) throw new ForbiddenError('Use "Minha conta" para trocar a sua própria senha.');
+    const temporaryPassword = generateTemporaryPassword();
+    const hash = await this.hasher.hash(temporaryPassword);
+    return this.tx.run(async () => {
+      const user = await this.users.findById(userId);
+      if (!user) throw new NotFoundError('Usuário não encontrado.');
+      await this.users.setPassword(userId, hash, true);
+      await this.sessions.revokeAllForUser(userId, this.clock.now());
+      await this.audit.record({ actorId, action: 'user.password_reset', entityType: 'user', entityId: userId, ip });
+      return {
+        user: toUserView({ ...user, mustChangePassword: true, failedLogins: 0, lockedUntil: null }),
+        temporaryPassword,
+      };
+    });
+  }
+
+  /**
    * Cria um administrador pela linha de comando (bootstrap do primeiro acesso).
    * A senha é aleatória (256 bits) e mostrada uma única vez a quem rodou o comando.
    */
-  async bootstrapAdmin(rawEmail: string): Promise<{ user: UserView; password: string }> {
+  async bootstrapAdmin(rawEmail: string, rawName?: string): Promise<{ user: UserView; password: string }> {
     const parsed = z.email().max(254).safeParse(rawEmail.trim().toLowerCase());
     if (!parsed.success) throw new ValidationError('E-mail inválido.');
     const email = parsed.data;
+    const name = rawName ? PersonNameSchema.safeParse(rawName) : null;
+    if (name && !name.success) throw new ValidationError(`Nome inválido: ${name.error.issues[0]?.message ?? ''}`);
 
     return this.tx.run(async () => {
       if (await this.users.findByEmail(email)) {
@@ -71,6 +100,7 @@ export class UsersAdminService {
       const password = generateSecureToken().token;
       const user = await this.users.create({
         email,
+        name: name?.data ?? null,
         passwordHash: await this.hasher.hash(password),
         role: 'admin',
         at: this.clock.now(),
@@ -84,4 +114,15 @@ export class UsersAdminService {
       return { user: toUserView(user), password };
     });
   }
+}
+
+/** Sem letras/números que se confundem (0/O, 1/l/I): fácil de ditar ou digitar. */
+const TEMP_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+/** 16 caracteres aleatórios em 4 grupos (~79 bits), ex.: "k7mp-2xqa-9ztn-h4rw". */
+export function generateTemporaryPassword(): string {
+  const groups = Array.from({ length: 4 }, () =>
+    Array.from({ length: 4 }, () => TEMP_ALPHABET[randomInt(TEMP_ALPHABET.length)]).join(''),
+  );
+  return groups.join('-');
 }

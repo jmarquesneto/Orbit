@@ -43,6 +43,7 @@ import {
 export interface InvitationView {
   id: string;
   email: string;
+  name: string | null;
   role: Role;
   status: InvitationStatus;
   expiresAt: Date;
@@ -74,8 +75,9 @@ export class InvitationsService {
 
   async create(
     actorId: string,
-    input: { email: string; role: Role; ttlHours?: number },
+    input: { email: string; name?: string | null; role: Role; ttlHours?: number },
     ip: string | null,
+    origin: string | null = null,
   ): Promise<{ invitation: InvitationView; link: string }> {
     const email = input.email.trim().toLowerCase();
     if (await this.users.findByEmail(email)) {
@@ -89,6 +91,7 @@ export class InvitationsService {
       const created = await this.invitations.create({
         tokenHash: hash,
         email,
+        name: input.name ?? null,
         role: input.role,
         invitedBy: actorId,
         expiresAt: new Date(now.getTime() + ttlHours * 3_600_000),
@@ -106,7 +109,7 @@ export class InvitationsService {
     });
 
     // O link com o token em claro é devolvido UMA vez, só para o admin que criou.
-    return { invitation: this.toView(invitation, now), link: this.links.build(token) };
+    return { invitation: this.toView(invitation, now), link: this.links.build(token, origin) };
   }
 
   async list(): Promise<InvitationView[]> {
@@ -137,20 +140,24 @@ export class InvitationsService {
   // -------------------------------------------------------- lado do convidado
 
   /** Flow, etapa 6: a tela de boas-vindas mostra o e-mail (travado) do convite. */
-  async inspect(token: unknown, ctx: RequestContext): Promise<{ email: string; expiresAt: Date }> {
+  async inspect(
+    token: unknown,
+    ctx: RequestContext,
+  ): Promise<{ email: string; name: string | null; expiresAt: Date }> {
     await enforceRateLimits(this.limiter, [
       { key: `invite:inspect:${ctx.ip ?? 'unknown'}`, limit: 30, windowSeconds: 600 },
     ]);
     const inv = await this.findPending(token);
-    return { email: inv.email, expiresAt: inv.expiresAt };
+    return { email: inv.email, name: inv.name, expiresAt: inv.expiresAt };
   }
 
   /** Flow, etapa 10: numa transação, cria o usuário, consome o token e abre a sessão. */
   async accept(
     token: unknown,
-    password: string,
+    input: { name: string; password: string },
     ctx: RequestContext,
   ): Promise<{ user: UserView; session: IssuedSession }> {
+    const { password } = input;
     await enforceRateLimits(this.limiter, [
       { key: `invite:accept:${ctx.ip ?? 'unknown'}`, limit: 10, windowSeconds: 600 },
     ]);
@@ -172,7 +179,7 @@ export class InvitationsService {
       if (!inv || invitationStatus(inv, now) !== 'pending') throw new InvalidInvitationError();
       if (await this.users.findByEmail(inv.email)) throw new InvalidInvitationError();
 
-      const user = await this.users.create({ email: inv.email, passwordHash, role: inv.role, at: now });
+      const user = await this.users.create({ email: inv.email, name: input.name, passwordHash, role: inv.role, at: now });
       await this.invitations.markUsed(inv.id, user.id, now);
       await this.users.updateLoginState(user.id, { failedLogins: 0, lockedUntil: null, lastLoginAt: now });
       const session = await this.sessions.issue(user, ctx);
@@ -201,6 +208,7 @@ export class InvitationsService {
     return {
       id: inv.id,
       email: inv.email,
+      name: inv.name,
       role: inv.role,
       status: invitationStatus(inv, now),
       expiresAt: inv.expiresAt,

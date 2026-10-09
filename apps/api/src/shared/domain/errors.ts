@@ -91,3 +91,11 @@ export class MfaReauthRequiredError extends DomainError {
     super('Confirme o código do seu app autenticador para continuar.');
   }
 }
+
+/** Senha provisória definida pelo admin: troque antes de continuar. */
+export class PasswordChangeRequiredError extends DomainError {
+  readonly code = 'password_change_required';
+  constructor() {
+    super('Defina uma nova senha para continuar.');
+  }
+}

@@ -6,6 +6,10 @@ export type Permissions = Record<'read' | 'update' | 'create' | 'delete' | 'shar
 export interface Me {
   id: string;
   email: string;
+  /** Nome de exibição; contas antigas podem não ter. */
+  name: string | null;
+  /** Senha provisória definida pelo admin: precisa ser trocada antes de usar o sistema. */
+  mustChangePassword: boolean;
   role: 'admin' | 'user';
   mfaEnabled: boolean;
   /** A instalação exige MFA de todos (security.mfa_required). */
@@ -171,6 +175,7 @@ export interface Setting {
 export interface Invitation {
   id: string;
   email: string;
+  name: string | null;
   role: 'admin' | 'user';
   status: 'pending' | 'used' | 'revoked' | 'expired';
   expiresAt: string;
@@ -180,6 +185,8 @@ export interface Invitation {
 export interface AdminUser {
   id: string;
   email: string;
+  name: string | null;
+  mustChangePassword: boolean;
   role: 'admin' | 'user';
   status: 'active' | 'locked';
   lastLoginAt: string | null;
@@ -192,3 +199,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   edit: 'Edição',
   create: 'Criação',
 };
+
+/** Como chamar a pessoa: o primeiro nome, ou a parte do e-mail antes do @ se não houver nome. */
+export function firstName(user: { name: string | null; email: string }): string {
+  return user.name?.trim().split(/\s+/)[0] || user.email.split('@')[0] || '';
+}

@@ -3,7 +3,15 @@ import type { Role, UserRecord, UserStatus } from '../domain/user.js';
 export interface UserRepository {
   findById(id: string): Promise<UserRecord | null>;
   findByEmail(email: string): Promise<UserRecord | null>;
-  create(data: { email: string; passwordHash: string; role: Role; at: Date }): Promise<UserRecord>;
+  create(data: {
+    email: string;
+    name?: string | null;
+    passwordHash: string;
+    role: Role;
+    at: Date;
+  }): Promise<UserRecord>;
+  updateName(id: string, name: string): Promise<void>;
+  setPassword(id: string, passwordHash: string, mustChange: boolean): Promise<void>;
   updateLoginState(
     id: string,
     state: { failedLogins: number; lockedUntil: Date | null; lastLoginAt?: Date },
@@ -37,6 +45,8 @@ export interface SessionRepository {
     mfaVerifiedAt?: Date | null;
   }): Promise<SessionRecord>;
   markMfaVerified(id: string, at: Date): Promise<void>;
+  /** Encerra todas as sessões do usuário, menos a da família informada (o aparelho atual). */
+  revokeOtherFamilies(userId: string, keepFamilyId: string, at: Date): Promise<void>;
   findById(id: string): Promise<SessionRecord | null>;
   /** Trava a sessão até o fim da transação: duas renovações simultâneas não passam juntas. */
   findByRefreshHashForUpdate(hash: Buffer): Promise<SessionRecord | null>;

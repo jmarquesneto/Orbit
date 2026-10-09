@@ -54,19 +54,19 @@ describe('InvitationsService', () => {
 
   it('accept cria o usuário, consome o convite e abre sessão — uma única vez', async () => {
     const { h, token } = await withInvite();
-    const { user, session } = await h.invitations.accept(token, STRONG, ctx);
+    const { user, session } = await h.invitations.accept(token, { name: 'Ana Souza', password: STRONG }, ctx);
 
-    expect(user).toMatchObject({ email: 'convidado@exemplo.com', role: 'user' });
+    expect(user).toMatchObject({ email: 'convidado@exemplo.com', name: 'Ana Souza', role: 'user' });
     expect(await h.sessions.authenticate(session.accessToken)).toMatchObject({ id: user.id });
     expect([...h.invitationsRepo.rows.values()][0]?.usedBy).toBe(user.id);
 
-    await expect(h.invitations.accept(token, STRONG, ctx)).rejects.toBeInstanceOf(InvalidInvitationError);
+    await expect(h.invitations.accept(token, { name: 'Ana Souza', password: STRONG }, ctx)).rejects.toBeInstanceOf(InvalidInvitationError);
   });
 
   it('senha fraca é recusada e o convite continua válido', async () => {
     const { h, token } = await withInvite();
-    await expect(h.invitations.accept(token, 'curta', ctx)).rejects.toBeInstanceOf(ValidationError);
-    await expect(h.invitations.accept(token, STRONG, ctx)).resolves.toBeDefined();
+    await expect(h.invitations.accept(token, { name: 'Ana Souza', password: 'curta' }, ctx)).rejects.toBeInstanceOf(ValidationError);
+    await expect(h.invitations.accept(token, { name: 'Ana Souza', password: STRONG }, ctx)).resolves.toBeDefined();
   });
 
   it.each([
@@ -80,7 +80,7 @@ describe('InvitationsService', () => {
     const { h, admin, created, token } = await withInvite();
     await spoil(h, created.invitation.id, admin.id);
     await expect(h.invitations.inspect(token, ctx)).rejects.toBeInstanceOf(InvalidInvitationError);
-    await expect(h.invitations.accept(token, STRONG, ctx)).rejects.toBeInstanceOf(InvalidInvitationError);
+    await expect(h.invitations.accept(token, { name: 'Ana Souza', password: STRONG }, ctx)).rejects.toBeInstanceOf(InvalidInvitationError);
   });
 
   it('token inexistente ou malformado dá a mesma resposta neutra', async () => {

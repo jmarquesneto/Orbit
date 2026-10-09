@@ -8,7 +8,9 @@ import type { UserRepository } from '../application/ports.js';
 const columns = {
   id: users.id,
   email: users.email,
+  name: users.name,
   passwordHash: users.passwordHash,
+  mustChangePassword: users.mustChangePassword,
   role: users.role,
   status: users.status,
   failedLogins: users.failedLogins,
@@ -38,7 +40,13 @@ export class DrizzleUserRepository implements UserRepository {
   async create(data: Parameters<UserRepository['create']>[0]): Promise<UserRecord> {
     const [row] = await this.ctx.db
       .insert(users)
-      .values({ email: data.email, passwordHash: data.passwordHash, role: data.role, createdAt: data.at })
+      .values({
+        email: data.email,
+        name: data.name ?? null,
+        passwordHash: data.passwordHash,
+        role: data.role,
+        createdAt: data.at,
+      })
       .returning(columns);
     if (!row) throw new Error('Falha ao criar usuário');
     return row;
@@ -56,6 +64,17 @@ export class DrizzleUserRepository implements UserRepository {
     await this.ctx.db
       .update(users)
       .set({ mfaEnabled: data.enabled, mfaSecret: data.secret, mfaLastStep: data.lastStep })
+      .where(eq(users.id, id));
+  }
+
+  async updateName(id: string, name: string) {
+    await this.ctx.db.update(users).set({ name }).where(eq(users.id, id));
+  }
+
+  async setPassword(id: string, passwordHash: string, mustChange: boolean) {
+    await this.ctx.db
+      .update(users)
+      .set({ passwordHash, mustChangePassword: mustChange, failedLogins: 0, lockedUntil: null })
       .where(eq(users.id, id));
   }
 

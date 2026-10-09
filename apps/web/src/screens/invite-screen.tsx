@@ -11,6 +11,8 @@ type State =
   | { step: 'invalid' }
   | { step: 'ready'; token: string; email: string; expiresAt: string };
 
+const NAME_RULE = /^\p{L}[\p{L}\p{M} .'-]*$/u;
+
 const MIN = 12;
 
 /**
@@ -21,6 +23,7 @@ export function InviteScreen() {
   const { name } = useBranding();
   const router = useRouter();
   const [state, setState] = useState<State>({ step: 'checking' });
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +37,21 @@ export function InviteScreen() {
       setState({ step: 'invalid' });
       return;
     }
-    post<{ email: string; expiresAt: string }>('/invitations/inspect', { token })
-      .then((r) => setState({ step: 'ready', token, email: r.email, expiresAt: r.expiresAt }))
+    post<{ email: string; name: string | null; expiresAt: string }>('/invitations/inspect', { token })
+      .then((r) => {
+        setFullName(r.name ?? '');
+        setState({ step: 'ready', token, email: r.email, expiresAt: r.expiresAt });
+      })
       .catch(() => setState({ step: 'invalid' }));
   }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (state.step !== 'ready') return;
+    if (fullName.trim().length < 2 || !NAME_RULE.test(fullName.trim())) {
+      setError("Informe seu nome (letras, espaço e . ' -).");
+      return;
+    }
     if (password !== confirm) {
       setError('As senhas não conferem.');
       return;
@@ -49,7 +59,7 @@ export function InviteScreen() {
     setBusy(true);
     setError(null);
     try {
-      await post('/invitations/accept', { token: state.token, password });
+      await post('/invitations/accept', { token: state.token, name: fullName.trim(), password });
       router.replace('/?bem-vindo=1');
     } catch (err) {
       setError(errorMessage(err));
@@ -78,12 +88,24 @@ export function InviteScreen() {
           <form className="stack" onSubmit={onSubmit}>
             <div className="stack-sm">
               <h1 style={{ fontSize: 22 }}>Boas-vindas ao {name}</h1>
-              <p className="small muted" style={{ margin: 0 }}>Crie sua senha para ativar a conta.</p>
+              <p className="small muted" style={{ margin: 0 }}>Diga como quer ser chamado e crie sua senha.</p>
             </div>
             <ErrorAlert error={error} />
             <label className="field">
               E-mail
               <input className="input" value={state.email} readOnly aria-readonly="true" autoComplete="username" />
+            </label>
+            <label className="field">
+              Seu nome
+              <input
+                className="input"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
+                maxLength={60}
+                required
+                autoFocus
+              />
             </label>
             <label className="field">
               Nova senha
@@ -97,7 +119,6 @@ export function InviteScreen() {
                 onChange={(e) => setPassword(e.target.value)}
                 aria-describedby="pw-help"
                 required
-                autoFocus
               />
               <span id="pw-help" className="xsmall muted">
                 Mínimo de {MIN} caracteres. Uma frase longa é mais segura que símbolos. Força: {strength}.

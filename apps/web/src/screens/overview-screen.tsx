@@ -18,7 +18,7 @@ import {
   shiftMonth,
 } from '@/lib/format';
 import { useAllInvoices, useBudgets, useGoals, useSummaries, useWallets } from '@/lib/queries';
-import { ROLE_LABEL } from '@/lib/types';
+import { firstName, ROLE_LABEL } from '@/lib/types';
 
 /** Tela "Dashboard geral" do design. */
 export function OverviewScreen() {
@@ -43,11 +43,10 @@ export function OverviewScreen() {
   const lastFuture = futureInvoices.map((i) => i.refMonth).sort().at(-1);
 
   const months = [-2, -1, 0, 1, 2].map((n) => shiftMonth(currentMonth(), n));
-  const firstName = me.email.split('@')[0];
 
   return (
     <>
-      <PageHeader eyebrow={longDate()} title={`${greeting()}, ${firstName}`}>
+      <PageHeader eyebrow={longDate()} title={`${greeting()}, ${firstName(me)}`}>
         <label className="btn" style={{ gap: 8 }}>
           Mês
           <select

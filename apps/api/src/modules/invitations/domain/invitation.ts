@@ -3,6 +3,7 @@ import type { Role } from '../../auth/domain/user.js';
 export interface InvitationRecord {
   id: string;
   email: string;
+  name: string | null;
   role: Role;
   invitedBy: string;
   expiresAt: Date;

@@ -34,6 +34,18 @@ export class AdminUsersController {
     return { user: await this.users.setStatus(actor.id, id, body.status, ctx.ip) };
   }
 
+  /** Senha provisória (mostrada uma vez) para quem esqueceu a senha. */
+  @RequireRecentMfa()
+  @Post(':id/password/reset')
+  @HttpCode(200)
+  resetPassword(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @ReqContext() ctx: RequestContext,
+  ) {
+    return this.users.resetPassword(actor.id, id, ctx.ip);
+  }
+
   /** Para quem perdeu o celular: desativa o MFA e encerra as sessões da pessoa. */
   @RequireRecentMfa()
   @Post(':id/mfa/reset')

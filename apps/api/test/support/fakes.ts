@@ -86,6 +86,8 @@ export class InMemoryUsers implements UserRepository {
       lockedUntil: null,
       lastLoginAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
+      name: null,
+      mustChangePassword: false,
       mfaEnabled: false,
       mfaSecret: null,
       mfaLastStep: null,
@@ -101,7 +103,13 @@ export class InMemoryUsers implements UserRepository {
     return [...this.rows.values()].find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
   }
   async create(data: Parameters<UserRepository['create']>[0]) {
-    return this.seed({ email: data.email, passwordHash: data.passwordHash, role: data.role, createdAt: data.at });
+    return this.seed({
+      email: data.email,
+      name: data.name ?? null,
+      passwordHash: data.passwordHash,
+      role: data.role,
+      createdAt: data.at,
+    });
   }
   async updateLoginState(id: string, state: Parameters<UserRepository['updateLoginState']>[1]) {
     const u = this.rows.get(id);
@@ -117,6 +125,14 @@ export class InMemoryUsers implements UserRepository {
   async setMfa(id: string, data: Parameters<UserRepository['setMfa']>[1]) {
     const u = this.rows.get(id);
     if (u) this.rows.set(id, { ...u, mfaEnabled: data.enabled, mfaSecret: data.secret, mfaLastStep: data.lastStep });
+  }
+  async updateName(id: string, name: string) {
+    const u = this.rows.get(id);
+    if (u) this.rows.set(id, { ...u, name });
+  }
+  async setPassword(id: string, passwordHash: string, mustChangePassword: boolean) {
+    const u = this.rows.get(id);
+    if (u) this.rows.set(id, { ...u, passwordHash, mustChangePassword, failedLogins: 0, lockedUntil: null });
   }
   async setMfaLastStep(id: string, step: number) {
     const u = this.rows.get(id);
@@ -165,6 +181,9 @@ export class InMemorySessions implements SessionRepository {
   async revokeAllForUser(userId: string, at: Date) {
     this.revokeWhere((s) => s.userId === userId, at);
   }
+  async revokeOtherFamilies(userId: string, keepFamilyId: string, at: Date) {
+    this.revokeWhere((s) => s.userId === userId && s.familyId !== keepFamilyId, at);
+  }
   active(): SessionRecord[] {
     return [...this.rows.values()].filter((s) => !s.revokedAt);
   }
@@ -178,6 +197,7 @@ export class InMemoryInvitations implements InvitationRepository {
       id: randomUUID(),
       tokenHash: data.tokenHash,
       email: data.email,
+      name: data.name,
       role: data.role,
       invitedBy: data.invitedBy,
       expiresAt: data.expiresAt,

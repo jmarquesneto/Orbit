@@ -14,7 +14,7 @@ docker compose up -d --build   # constrói e sobe web, api, db e redis
 docker compose ps              # os 4 serviços devem ficar "healthy"
 ```
 
-Acesse <http://localhost:3000>. Só o frontend publica porta, e por padrão apenas em `127.0.0.1`.
+Acesse <http://localhost:3010>. Só o frontend publica porta, e por padrão apenas em `127.0.0.1`.
 Em produção, coloque um proxy reverso com TLS na frente.
 
 Para apagar tudo, inclusive os dados: `docker compose down -v`.
@@ -27,10 +27,10 @@ No Windows sem Git Bash, gere o `.env` com
 As migrações rodam sozinhas a cada `up` (serviço `migrate`). Crie o administrador uma vez:
 
 ```sh
-docker compose run --rm api node dist/cli/create-admin.js voce@exemplo.com
+docker compose run --rm api node dist/cli/create-admin.js voce@exemplo.com "Seu Nome"
 ```
 
-O comando mostra uma senha aleatória **uma única vez**. Abra <http://localhost:3000> (ou a
+O comando mostra uma senha aleatória **uma única vez**. Abra <http://localhost:3010> (ou a
 porta do seu `.env`), entre com o e-mail e essa senha. No primeiro acesso o sistema pede para
 cadastrar a **verificação em duas etapas** (um app autenticador no celular, como Google
 Authenticator ou Microsoft Authenticator) e mostra 10 códigos de recuperação: guarde-os. Depois,
@@ -141,16 +141,18 @@ O navegador acessa a API pelo próprio frontend (`/api/*` é repassado pela rede
 | `POST /api/auth/mfa/recovery-codes` · `/disable` | logado | `{ code }` gera novos códigos / desativa (se não for obrigatório) |
 | `POST /api/auth/refresh` | público (cookie) | renova a sessão |
 | `POST /api/auth/logout` | logado | encerra a sessão |
-| `GET /api/auth/me` | logado | usuário atual |
+| `GET /api/auth/me` · `PATCH /api/auth/me` | logado | usuário atual / `{ name }` troca o nome de exibição |
+| `POST /api/auth/password` | logado | `{ currentPassword, newPassword }` troca a senha e encerra as outras sessões |
 | `POST /api/invitations/inspect` | público | `{ token }` → e-mail do convite |
-| `POST /api/invitations/accept` | público | `{ token, password }` → cria a conta e já entra |
+| `POST /api/invitations/accept` | público | `{ token, name, password }` → cria a conta e já entra |
 | `GET /api/admin/settings` | admin | lista as configurações |
 | `PATCH /api/admin/settings/:key` | admin | ex.: `app.name` com `{ "value": "Novo nome" }` |
 | `GET /api/admin/invitations` | admin | lista os convites |
-| `POST /api/admin/invitations` | admin | `{ email, role?, ttlHours? }` → link do convite |
+| `POST /api/admin/invitations` | admin | `{ email, name?, role?, ttlHours? }` → link do convite (no endereço que o admin está usando) |
 | `DELETE /api/admin/invitations/:id` | admin | revoga um convite pendente |
 | `GET /api/admin/users` | admin | lista os usuários |
 | `PATCH /api/admin/users/:id/status` | admin | `{ status: "active" \| "locked" }` |
+| `POST /api/admin/users/:id/password/reset` | admin | senha provisória (mostrada uma vez); a pessoa cria uma nova no próximo acesso |
 | `POST /api/admin/users/:id/mfa/reset` | admin | desativa o MFA da pessoa e encerra as sessões dela |
 | `GET /api/health/live` · `/ready` | público | saúde da API |
 

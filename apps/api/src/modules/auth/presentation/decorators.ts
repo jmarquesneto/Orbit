@@ -19,14 +19,15 @@ export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionConte
   return user;
 });
 
-export const ALLOW_WITHOUT_MFA = 'auth:allowWithoutMfa';
+export const ALLOW_DURING_SETUP = 'auth:allowDuringSetup';
 export const REQUIRE_RECENT_MFA = 'auth:requireRecentMfa';
 
 /**
- * Rota liberada para quem ainda não configurou o MFA numa instalação que o exige
- * (ex.: /auth/me, logout e o próprio cadastro do app autenticador).
+ * Rota liberada enquanto a conta ainda está sendo configurada: senha provisória a trocar
+ * ou MFA obrigatório ainda não cadastrado (ex.: /auth/me, logout, troca de senha e o
+ * próprio cadastro do app autenticador).
  */
-export const AllowWithoutMfa = () => SetMetadata(ALLOW_WITHOUT_MFA, true);
+export const AllowDuringSetup = () => SetMetadata(ALLOW_DURING_SETUP, true);
 
 /** Ação sensível: exige o código do MFA confirmado nos últimos 5 minutos. */
 export const RequireRecentMfa = () => SetMetadata(REQUIRE_RECENT_MFA, true);

@@ -249,7 +249,13 @@ function Invitations() {
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    create.mutate({ email: String(f.get('email')), role: String(f.get('role')), ttlHours: Number(f.get('ttl')) });
+    const name = String(f.get('name') ?? '').trim();
+    create.mutate({
+      email: String(f.get('email')),
+      ...(name ? { name } : {}),
+      role: String(f.get('role')),
+      ttlHours: Number(f.get('ttl')),
+    });
     e.currentTarget.reset();
   }
 
@@ -257,6 +263,10 @@ function Invitations() {
     <section id="convites" className="card" aria-labelledby="h-conv">
       <h2 id="h-conv" style={{ fontSize: 18 }}>Convites</h2>
       <form className="row" style={{ alignItems: 'flex-end' }} onSubmit={onSubmit}>
+        <label className="field" style={{ flex: '2 1 200px' }}>
+          Nome (opcional)
+          <input className="input" name="name" maxLength={60} placeholder="A pessoa confirma ao aceitar" />
+        </label>
         <label className="field" style={{ flex: '2 1 220px' }}>
           E-mail do convidado
           <input className="input" name="email" type="email" required />
@@ -312,7 +322,10 @@ function Invitations() {
               const [label, tone] = STATUS_LABEL[i.status];
               return (
                 <tr key={i.id}>
-                  <td>{i.email}</td>
+                  <td>
+                    {i.name && <span style={{ display: 'block' }}>{i.name}</span>}
+                    <span className={i.name ? 'small muted' : undefined}>{i.email}</span>
+                  </td>
                   <td>{i.role === 'admin' ? 'Administrador' : 'Usuário'}</td>
                   <td><span className={`badge ${tone}`}>{label}</span></td>
                   <td className="mono">{isoToBr(i.expiresAt)}</td>
@@ -341,6 +354,22 @@ function Users() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
     onError: (e) => setError(errorMessage(e)),
   });
+  const [temp, setTemp] = useState<{ email: string; password: string } | null>(null);
+  const [tempCopied, setTempCopied] = useState(false);
+  const resetPassword = useMutation({
+    mutationFn: (u: AdminUser) =>
+      post<{ temporaryPassword: string }>(`/admin/users/${u.id}/password/reset`).then((r) => ({
+        email: u.email,
+        password: r.temporaryPassword,
+      })),
+    onSuccess: (r) => {
+      setError(null);
+      setTemp(r);
+      setTempCopied(false);
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
   const resetMfa = useMutation({
     mutationFn: (id: string) => post(`/admin/users/${id}/mfa/reset`),
     onSuccess: () => {
@@ -353,11 +382,28 @@ function Users() {
     <section className="card" aria-labelledby="h-users">
       <h2 id="h-users" style={{ fontSize: 18 }}>Usuários</h2>
       <ErrorAlert error={error} />
+      {temp && (
+        <div className="alert ok" role="status" style={{ flexDirection: 'column' }}>
+          <span>
+            Senha provisória de <b>{temp.email}</b>. Passe para a pessoa por um canal seguro — ela só aparece agora.
+            No próximo acesso a pessoa vai criar uma senha nova.
+          </span>
+          <span className="row" style={{ gap: 8, width: '100%' }}>
+            <input className="input mono" readOnly value={temp.password} onFocus={(e) => e.currentTarget.select()} style={{ flex: '1 1 220px', fontSize: 15 }} />
+            <button type="button" className="btn small" onClick={() => navigator.clipboard.writeText(temp.password).then(() => setTempCopied(true))}>
+              {tempCopied ? 'Copiado!' : 'Copiar'}
+            </button>
+            <button type="button" className="btn small" onClick={() => setTemp(null)}>
+              Fechar
+            </button>
+          </span>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
-              <th scope="col">E-mail</th>
+              <th scope="col">Pessoa</th>
               <th scope="col">Papel</th>
               <th scope="col">Último acesso</th>
               <th scope="col">2 etapas</th>
@@ -368,12 +414,35 @@ function Users() {
           <tbody>
             {(list.data ?? []).map((u) => (
               <tr key={u.id}>
-                <td>{u.email}</td>
+                <td>
+                  {u.name && <span style={{ display: 'block' }}>{u.name}</span>}
+                  <span className={u.name ? 'small muted' : undefined}>{u.email}</span>
+                  {u.mustChangePassword && (
+                    <div style={{ marginTop: 4 }}>
+                      <span className="badge warn">Senha provisória</span>
+                    </div>
+                  )}
+                </td>
                 <td>{u.role === 'admin' ? 'Administrador' : 'Usuário'}</td>
                 <td className="mono">{u.lastLoginAt ? isoToBr(u.lastLoginAt) : '—'}</td>
                 <td><span className={`badge ${u.mfaEnabled ? 'ok' : ''}`}>{u.mfaEnabled ? 'Ativa' : 'Não'}</span></td>
                 <td><span className={`badge ${u.status === 'active' ? 'ok' : 'warn'}`}>{u.status === 'active' ? 'Ativo' : 'Bloqueado'}</span></td>
                 <td style={{ textAlign: 'right' }}>
+                  {u.id !== me.id && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      style={{ marginRight: 8 }}
+                      disabled={resetPassword.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Gerar uma senha provisória para ${u.email}? A senha atual deixa de valer e a pessoa sai de todos os aparelhos.`)) {
+                          resetPassword.mutate(u);
+                        }
+                      }}
+                    >
+                      Redefinir senha
+                    </button>
+                  )}
                   {u.id !== me.id && u.mfaEnabled && (
                     <button
                       type="button"

@@ -150,6 +150,8 @@ export class SessionService {
     return {
       id: user.id,
       email: user.email,
+      name: user.name,
+      mustChangePassword: user.mustChangePassword,
       role: user.role,
       sessionId: session.id,
       mfaEnabled: user.mfaEnabled,

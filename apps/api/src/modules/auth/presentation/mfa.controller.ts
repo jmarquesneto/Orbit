@@ -5,7 +5,7 @@ import { ReqContext } from '../../../shared/presentation/request-context.js';
 import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe.js';
 import { MfaService } from '../application/mfa.service.js';
 import type { AuthUser } from '../domain/user.js';
-import { AllowWithoutMfa, CurrentUser } from './decorators.js';
+import { AllowDuringSetup, CurrentUser } from './decorators.js';
 
 const CodeSchema = z.strictObject({ code: z.string().trim().min(6).max(32) });
 type CodeBody = z.infer<typeof CodeSchema>;
@@ -16,14 +16,14 @@ const codePipe = new ZodValidationPipe(CodeSchema);
 export class MfaController {
   constructor(private readonly mfa: MfaService) {}
 
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Get()
   status(@CurrentUser() user: AuthUser) {
     return this.mfa.status(user.id);
   }
 
   /** Gera o segredo e o QR code. Nada é gravado até o código ser confirmado. */
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Post('setup')
   @HttpCode(200)
   setup(@CurrentUser() user: AuthUser) {
@@ -31,7 +31,7 @@ export class MfaController {
   }
 
   /** Confirma o primeiro código, ativa o MFA e devolve os códigos de recuperação (uma vez). */
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Post('enable')
   @HttpCode(200)
   enable(@CurrentUser() user: AuthUser, @Body(codePipe) body: CodeBody, @ReqContext() ctx: RequestContext) {

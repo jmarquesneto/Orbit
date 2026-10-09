@@ -1,3 +1,4 @@
+import { AccountService } from '../../src/modules/auth/application/account.service.js';
 import { MfaService } from '../../src/modules/auth/application/mfa.service.js';
 import { LoginUseCase } from '../../src/modules/auth/application/login.use-case.js';
 import { SessionService } from '../../src/modules/auth/application/session.service.js';
@@ -62,6 +63,7 @@ export function buildHarness() {
   );
   const login = new LoginUseCase(users, fakeHasher, limiter, audit, passthroughTx, clock, sessions, mfa);
   const usersAdmin = new UsersAdminService(users, sessionsRepo, fakeHasher, audit, passthroughTx, clock);
+  const account = new AccountService(users, sessionsRepo, fakeHasher, limiter, audit, passthroughTx, clock);
   const invitations = new InvitationsService(
     invitationsRepo,
     { build: (token) => `http://localhost:3000/convite#${token}` },
@@ -89,6 +91,7 @@ export function buildHarness() {
     recoveryRepo,
     store,
     usersAdmin,
+    account,
     settings,
     invitations,
   };

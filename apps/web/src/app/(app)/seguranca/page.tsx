@@ -1,8 +1,6 @@
-import type { Metadata } from 'next';
-import { SecurityScreen } from '@/screens/security-screen';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Segurança' };
-
+/** Endereço antigo: a verificação em duas etapas agora fica em "Minha conta". */
 export default function Page() {
-  return <SecurityScreen />;
+  redirect('/conta');
 }

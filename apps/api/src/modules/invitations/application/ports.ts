@@ -5,6 +5,7 @@ export interface InvitationRepository {
   create(data: {
     tokenHash: Buffer;
     email: string;
+    name: string | null;
     role: Role;
     invitedBy: string;
     expiresAt: Date;
@@ -22,6 +23,7 @@ export const INVITATION_REPOSITORY = Symbol('INVITATION_REPOSITORY');
 
 /** Monta o link público do convite (o frontend tem a tela /convite). */
 export interface InvitationLinkBuilder {
-  build(token: string): string;
+  /** `origin`: endereço que o admin está usando; sem ele, vale WEB_ORIGIN. */
+  build(token: string, origin?: string | null): string;
 }
 export const INVITATION_LINK_BUILDER = Symbol('INVITATION_LINK_BUILDER');

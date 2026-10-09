@@ -36,7 +36,11 @@ export const userStatus = pgEnum('user_status', ['active', 'locked']);
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: citext('email').notNull().unique(),
+  /** Nome exibido na interface ("Olá, Marina"). Contas antigas podem não ter. */
+  name: text('name'),
   passwordHash: text('password_hash').notNull(),
+  /** Senha provisória definida pelo admin: precisa ser trocada no próximo acesso. */
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
   mfaSecret: bytea('mfa_secret'),
   mfaEnabled: boolean('mfa_enabled').notNull().default(false),
   /** Último passo TOTP aceito: o mesmo código nunca vale duas vezes (anti-replay). */
@@ -57,6 +61,8 @@ export const invitations = pgTable(
     /** SHA-256 do token. O token em claro só existe no link entregue ao convidado. */
     tokenHash: bytea('token_hash').notNull().unique(),
     email: citext('email').notNull(),
+    /** Nome sugerido pelo admin; o convidado confirma ao aceitar. */
+    name: text('name'),
     role: userRole('role').notNull().default('user'),
     invitedBy: uuid('invited_by')
       .notNull()

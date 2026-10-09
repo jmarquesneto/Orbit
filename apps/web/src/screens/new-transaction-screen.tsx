@@ -9,10 +9,14 @@ import { TransferForm } from '@/components/transfers';
 import { Empty, ErrorAlert, PageHeader } from '@/components/ui';
 import { errorMessage, post } from '@/lib/api';
 import { isoToBr, money, monthLabel, parseMoneyInput, todayIso } from '@/lib/format';
-import { useBudgets, useCategories, useWallets } from '@/lib/queries';
+import { keys, useBudgets, useCategories, useWallets } from '@/lib/queries';
 import type { Wallet } from '@/lib/types';
 
-const INSTALLMENTS = [1, 2, 3, 4, 5, 6, 10, 12];
+/** Botões de 1x a 12x; acima disso (até 48x, limite do servidor) pela lista "Mais". */
+const NEW_CATEGORY = '__nova__';
+
+const INSTALLMENTS = Array.from({ length: 12 }, (_, i) => i + 1);
+const MORE_INSTALLMENTS = Array.from({ length: 36 }, (_, i) => i + 13);
 
 function walletSub(w: Wallet) {
   if (w.type === 'credit' && w.card) return `Cartão${w.last4 ? ` ••${w.last4}` : ''} · fecha dia ${w.card.closingDay}`;
@@ -58,6 +62,23 @@ export function NewTransactionScreen() {
 
   const categories = useCategories(budgetId || undefined);
   const kindCategories = (categories.data ?? []).filter((c) => c.kind === kind);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+
+  /** Cria a categoria no orçamento escolhido, sem sair do lançamento, e já a seleciona. */
+  async function createCategory() {
+    const name = newCategory.trim();
+    if (!name || !budgetId) return;
+    try {
+      const r = await post<{ category: { id: string } }>(`/budgets/${budgetId}/categories`, { name, kind, plannedCents: 0 });
+      await queryClient.invalidateQueries({ queryKey: keys.categories(budgetId) });
+      setCategoryId(r.category.id);
+      setCreatingCategory(false);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
 
   const usable = (wallets.data ?? []).filter((w) => kind === 'expense' || w.type !== 'credit');
   useEffect(() => {
@@ -212,17 +233,59 @@ export function NewTransactionScreen() {
             <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </label>
           <BudgetPicker budgets={budgets.data ?? []} value={budgetId} onChange={setBudgetId} onlyWritable />
-          <label className="field">
-            Categoria
-            <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Sem categoria</option>
-              {kindCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {creatingCategory ? (
+            <div className="field">
+              <label htmlFor="new-category">Nova categoria de {kind === 'expense' ? 'despesa' : 'receita'}</label>
+              <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                <input
+                  id="new-category"
+                  className="input"
+                  value={newCategory}
+                  maxLength={60}
+                  autoFocus
+                  placeholder="Ex.: Mercado"
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void createCategory();
+                    }
+                    if (e.key === 'Escape') setCreatingCategory(false);
+                  }}
+                />
+                <button type="button" className="btn small primary" disabled={!newCategory.trim() || !budgetId} onClick={() => void createCategory()}>
+                  Criar
+                </button>
+                <button type="button" className="btn small" aria-label="Cancelar nova categoria" onClick={() => setCreatingCategory(false)}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="field">
+              Categoria
+              <select
+                className="select"
+                value={categoryId}
+                onChange={(e) => {
+                  if (e.target.value === NEW_CATEGORY) {
+                    setNewCategory('');
+                    setCreatingCategory(true);
+                  } else {
+                    setCategoryId(e.target.value);
+                  }
+                }}
+              >
+                <option value="">Sem categoria</option>
+                {kindCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+                <option value={NEW_CATEGORY}>+ Nova categoria…</option>
+              </select>
+            </label>
+          )}
         </div>
 
         <fieldset style={{ margin: 0, padding: 0, border: 0 }} className="stack-sm">
@@ -251,6 +314,20 @@ export function NewTransactionScreen() {
                   {n}x
                 </button>
               ))}
+              <select
+                className="select"
+                style={{ width: 'auto', minHeight: 36 }}
+                aria-label="Mais parcelas"
+                value={installments > 12 ? installments : ''}
+                onChange={(e) => e.target.value && setInstallments(Number(e.target.value))}
+              >
+                <option value="">Mais…</option>
+                {MORE_INSTALLMENTS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}x
+                  </option>
+                ))}
+              </select>
             </div>
             {invoiceMonth && wallet?.card && (
               <p className="small muted" style={{ margin: 0 }}>

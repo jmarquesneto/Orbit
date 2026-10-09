@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ENV } from '../../config/config.module.js';
 import type { Env } from '../../config/env.schema.js';
 import { SettingsModule } from '../settings/settings.module.js';
+import { AccountService } from './application/account.service.js';
 import { LoginUseCase } from './application/login.use-case.js';
 import { MfaService } from './application/mfa.service.js';
 import {
@@ -52,6 +53,7 @@ import { MfaController } from './presentation/mfa.controller.js';
     },
     SessionService,
     LoginUseCase,
+    AccountService,
     MfaService,
     UsersAdminService,
     AuthCookies,

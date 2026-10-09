@@ -78,6 +78,11 @@ export function BudgetDetailScreen({ id }: { id: string }) {
             </option>
           ))}
         </select>
+        {perms?.create && (
+          <a className="btn primary" href="#nova-categoria">
+            + Nova categoria
+          </a>
+        )}
         {b.role === 'owner' && (
           <button type="button" className="btn danger" onClick={() => confirm(`Arquivar “${b.name}”?`) && archive.mutate()}>
             Arquivar
@@ -149,7 +154,14 @@ export function BudgetDetailScreen({ id }: { id: string }) {
           <span className="small muted">Nenhuma categoria ainda.</span>
         )}
         {perms?.create && (
-          <form className="row" style={{ alignItems: 'flex-end' }} onSubmit={onAddCategory}>
+          <form
+            id="nova-categoria"
+            className="row"
+            style={{ alignItems: 'flex-end', paddingTop: 16, borderTop: '1px solid var(--border)', scrollMarginTop: 24 }}
+            onSubmit={onAddCategory}
+            aria-label="Nova categoria"
+          >
+            <span className="small text-2" style={{ flex: '1 1 100%' }}>Nova categoria</span>
             <div className="segmented" role="group" aria-label="Tipo da categoria">
               <button type="button" className="expense" aria-pressed={kind === 'expense'} onClick={() => setKind('expense')}>
                 Despesa

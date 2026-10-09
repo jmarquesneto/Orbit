@@ -2,6 +2,8 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
+import { PasswordForm, ProfileForm } from '@/components/account';
+import { useMe } from '@/components/app-shell';
 import { CodeField, codeFrom, MfaEnrollment, RecoveryCodes } from '@/components/mfa';
 import { ErrorAlert, Loading, PageHeader, SuccessAlert } from '@/components/ui';
 import { api, errorMessage, post } from '@/lib/api';
@@ -9,8 +11,35 @@ import type { MfaStatus } from '@/lib/types';
 
 type Action = 'regenerate' | 'disable' | null;
 
+/** Tela "Minha conta": nome, senha e verificação em duas etapas. */
+export function AccountScreen() {
+  const me = useMe();
+  const queryClient = useQueryClient();
+  return (
+    <>
+      <PageHeader eyebrow="Conta" title="Minha conta" />
+      <div className="row" style={{ alignItems: 'flex-start', gap: 20 }}>
+        <section className="card" aria-labelledby="h-profile" style={{ flex: '1 1 340px', maxWidth: 560 }}>
+          <h2 id="h-profile" style={{ fontSize: 18 }}>Perfil</h2>
+          <ProfileForm
+            key={me.name ?? ''}
+            initialName={me.name}
+            email={me.email}
+            onSaved={() => void queryClient.invalidateQueries({ queryKey: ['me'] })}
+          />
+        </section>
+        <section className="card" aria-labelledby="h-password" style={{ flex: '1 1 340px', maxWidth: 560 }}>
+          <h2 id="h-password" style={{ fontSize: 18 }}>Senha</h2>
+          <PasswordForm onDone={() => undefined} />
+        </section>
+      </div>
+      <MfaSection />
+    </>
+  );
+}
+
 /** Verificação em duas etapas da própria conta. */
-export function SecurityScreen() {
+function MfaSection() {
   const queryClient = useQueryClient();
   const status = useQuery({ queryKey: ['mfa'], queryFn: () => api<MfaStatus>('/auth/mfa') });
   const [action, setAction] = useState<Action>(null);
@@ -49,7 +78,6 @@ export function SecurityScreen() {
 
   return (
     <>
-      <PageHeader eyebrow="Conta" title="Segurança" />
       <section className="card" aria-labelledby="h-mfa" style={{ maxWidth: 560 }}>
         <div className="between">
           <h2 id="h-mfa" style={{ fontSize: 18 }}>Verificação em duas etapas</h2>

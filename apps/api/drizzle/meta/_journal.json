@@ -57,6 +57,13 @@
       "when": 1791487079327,
       "tag": "0007_mfa_transfers_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791506130121,
+      "tag": "0008_user_name_and_password_reset",
+      "breakpoints": true
     }
   ]
 }

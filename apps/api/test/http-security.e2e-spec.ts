@@ -20,7 +20,7 @@ import type { AuthUser } from '../src/modules/auth/domain/user.js';
 import { AuthCookies } from '../src/modules/auth/presentation/auth-cookies.js';
 import { MfaService } from '../src/modules/auth/application/mfa.service.js';
 import {
-  AllowWithoutMfa,
+  AllowDuringSetup,
   CurrentUser,
   Public,
   RequireRecentMfa,
@@ -35,16 +35,30 @@ import { ZodValidationPipe } from '../src/shared/presentation/zod-validation.pip
 
 const WEB_ORIGIN = 'http://localhost:3000';
 const users: Record<string, AuthUser> = {
-  'token-admin-aaaaaaaaaaaaa': { id: 'a', email: 'admin@x.com', role: 'admin', sessionId: 's1', mfaEnabled: true, mfaVerifiedAt: null },
+  'token-admin-aaaaaaaaaaaaa': { id: 'a', email: 'admin@x.com', role: 'admin', sessionId: 's1',
+    name: null,
+    mustChangePassword: false, mfaEnabled: true, mfaVerifiedAt: null },
   'token-fresh-cccccccccccccc': {
     id: 'f',
     email: 'fresh@x.com',
     role: 'admin',
     sessionId: 's3',
+    name: null,
+    mustChangePassword: false,
     mfaEnabled: true,
     mfaVerifiedAt: new Date(),
   },
-  'token-user-bbbbbbbbbbbbbb': { id: 'u', email: 'user@x.com', role: 'user', sessionId: 's2', mfaEnabled: false, mfaVerifiedAt: null },
+  'token-temp-dddddddddddddd': {
+    id: 't',
+    email: 'temp@x.com',
+    role: 'user',
+    sessionId: 's4',
+    name: null,
+    mustChangePassword: true,
+    mfaEnabled: true,
+    mfaVerifiedAt: new Date(),
+  },
+  'token-user-bbbbbbbbbbbbbb': { id: 'u', email: 'user@x.com', role: 'user', sessionId: 's2', name: null, mustChangePassword: false, mfaEnabled: false, mfaVerifiedAt: null },
 };
 
 let mfaRequired = false;
@@ -57,7 +71,7 @@ class ProbeController {
     return { ok: true };
   }
 
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Get('setup')
   setup() {
     return { ok: true };
@@ -169,6 +183,13 @@ describe('Segurança HTTP (guards, CSRF, validação)', () => {
     } finally {
       mfaRequired = false;
     }
+  });
+
+  it('senha provisória: só as rotas de configuração da conta', async () => {
+    const auth = { Authorization: 'Bearer token-temp-dddddddddddddd' };
+    const res = await http().get('/mine').set(auth).expect(403);
+    expect(res.body.error.code).toBe('password_change_required');
+    await http().get('/setup').set(auth).expect(200);
   });
 
   it('ação sensível exige MFA confirmado nos últimos 5 minutos', async () => {

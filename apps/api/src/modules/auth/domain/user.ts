@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const ROLES = ['admin', 'user'] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -6,7 +8,9 @@ export type UserStatus = 'active' | 'locked';
 export interface UserRecord {
   id: string;
   email: string;
+  name: string | null;
   passwordHash: string;
+  mustChangePassword: boolean;
   role: Role;
   status: UserStatus;
   failedLogins: number;
@@ -23,6 +27,8 @@ export interface UserRecord {
 export interface UserView {
   id: string;
   email: string;
+  name: string | null;
+  mustChangePassword: boolean;
   role: Role;
   status: UserStatus;
   mfaEnabled: boolean;
@@ -34,6 +40,8 @@ export function toUserView(u: UserRecord): UserView {
   return {
     id: u.id,
     email: u.email,
+    name: u.name,
+    mustChangePassword: u.mustChangePassword,
     role: u.role,
     status: u.status,
     mfaEnabled: u.mfaEnabled,
@@ -46,12 +54,27 @@ export function toUserView(u: UserRecord): UserView {
 export interface AuthUser {
   id: string;
   email: string;
+  name: string | null;
+  /** Senha provisória: só as rotas de configuração da conta ficam liberadas. */
+  mustChangePassword: boolean;
   role: Role;
   sessionId: string;
   mfaEnabled: boolean;
   /** Quando o MFA foi confirmado pela última vez nesta sessão. */
   mfaVerifiedAt: Date | null;
 }
+
+/**
+ * Nome de exibição: letras (com acento), espaço, apóstrofo, ponto e hífen. Sem "<", ">"
+ * ou aspas — é texto puro na interface e nunca vira HTML.
+ */
+export const PersonNameSchema = z
+  .string()
+  .trim()
+  .min(2, 'Informe ao menos 2 letras.')
+  .max(60, 'Use no máximo 60 caracteres.')
+  .regex(/^\p{L}[\p{L}\p{M} .'-]*$/u, "Use apenas letras, espaço e . ' -")
+  .transform((v) => v.replace(/\s+/g, ' '));
 
 /** Ações sensíveis de admin exigem MFA confirmado há no máximo 5 minutos. */
 export const MFA_REAUTH_WINDOW_MS = 5 * 60_000;

@@ -8,6 +8,7 @@ import type { InvitationRepository } from '../application/ports.js';
 const columns = {
   id: invitations.id,
   email: invitations.email,
+  name: invitations.name,
   role: invitations.role,
   invitedBy: invitations.invitedBy,
   expiresAt: invitations.expiresAt,
@@ -27,6 +28,7 @@ export class DrizzleInvitationRepository implements InvitationRepository {
       .values({
         tokenHash: data.tokenHash,
         email: data.email,
+        name: data.name,
         role: data.role,
         invitedBy: data.invitedBy,
         expiresAt: data.expiresAt,

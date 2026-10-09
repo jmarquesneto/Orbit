@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { DbContext } from '../../../infrastructure/database/db-context.js';
 import { sessions } from '../../../infrastructure/database/schema.js';
 import type { SessionRecord, SessionRepository } from '../application/ports.js';
@@ -72,5 +72,12 @@ export class DrizzleSessionRepository implements SessionRepository {
       .update(sessions)
       .set({ revokedAt: at })
       .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+  }
+
+  async revokeOtherFamilies(userId: string, keepFamilyId: string, at: Date) {
+    await this.ctx.db
+      .update(sessions)
+      .set({ revokedAt: at })
+      .where(and(eq(sessions.userId, userId), ne(sessions.familyId, keepFamilyId), isNull(sessions.revokedAt)));
   }
 }

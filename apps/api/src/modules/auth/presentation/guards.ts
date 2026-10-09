@@ -5,6 +5,7 @@ import {
   ForbiddenError,
   MfaReauthRequiredError,
   MfaSetupRequiredError,
+  PasswordChangeRequiredError,
   UnauthenticatedError,
 } from '../../../shared/domain/errors.js';
 import { MfaService } from '../application/mfa.service.js';
@@ -12,7 +13,7 @@ import { SessionService } from '../application/session.service.js';
 import { MFA_REAUTH_WINDOW_MS, type Role } from '../domain/user.js';
 import { AuthCookies } from './auth-cookies.js';
 import {
-  ALLOW_WITHOUT_MFA,
+  ALLOW_DURING_SETUP,
   type AuthenticatedRequest,
   IS_PUBLIC,
   REQUIRE_RECENT_MFA,
@@ -45,7 +46,8 @@ export class JwtAuthGuard implements CanActivate {
 
 /**
  * Guard GLOBAL que roda depois do JWT:
- *  - instalação exige MFA e a pessoa ainda não cadastrou → só as rotas @AllowWithoutMfa;
+ *  - senha provisória (definida pelo admin) → só as rotas @AllowDuringSetup;
+ *  - instalação exige MFA e a pessoa ainda não cadastrou → só as rotas @AllowDuringSetup;
  *  - rota @RequireRecentMfa → código confirmado nos últimos 5 minutos nesta sessão.
  */
 @Injectable()
@@ -61,8 +63,10 @@ export class MfaGuard implements CanActivate {
     const user = context.switchToHttp().getRequest<AuthenticatedRequest>().user;
     if (!user) return true; // rota pública
 
+    const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_DURING_SETUP, targets);
+    if (user.mustChangePassword && !allowed) throw new PasswordChangeRequiredError();
+
     if (!user.mfaEnabled) {
-      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA, targets);
       if (!allowed && (await this.mfa.isRequired())) throw new MfaSetupRequiredError();
       return true; // sem MFA cadastrado (e não obrigatório) não há o que reconfirmar
     }

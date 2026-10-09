@@ -6,13 +6,65 @@ import { useEffect, useState } from 'react';
 import { Empty, ErrorAlert, Loading, PageHeader } from '@/components/ui';
 import { api, del, errorMessage, post } from '@/lib/api';
 import { isoToBr, money, monthLabel } from '@/lib/format';
-import { useInvoices, useWallets } from '@/lib/queries';
-import type { Invoice, InvoiceDetail } from '@/lib/types';
+import { useAllInvoices, useInvoices, useWallets } from '@/lib/queries';
+import type { Invoice, InvoiceDetail, Wallet } from '@/lib/types';
 
 function invoiceBadge(i: Invoice) {
   if (i.status === 'paid') return <span className="badge ok">Paga</span>;
   if (i.closingDate <= new Date().toISOString().slice(0, 10)) return <span className="badge warn">Fechada</span>;
   return <span className="badge info">Aberta</span>;
+}
+
+const ALL = 'all';
+
+/** A fatura "da vez" de um cartão: a primeira ainda não paga; se todas pagas, a mais recente. */
+export function currentInvoice(list: Invoice[]): Invoice | null {
+  const unpaid = list.filter((i) => i.status !== 'paid').sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  return unpaid[0] ?? [...list].sort((a, b) => b.refMonth.localeCompare(a.refMonth))[0] ?? null;
+}
+
+/** "Todos os cartões": quanto vem em cada fatura e o total, com atalho para cada cartão. */
+function AllCardsSummary({ cards, onOpen }: { cards: Wallet[]; onOpen: (cardId: string) => void }) {
+  const results = useAllInvoices(cards.map((c) => c.id));
+  if (results.some((r) => r.isLoading)) return <Loading />;
+  const rows = cards.map((card, i) => ({ card, invoice: currentInvoice(results[i]?.data ?? []) }));
+  const due = (inv: Invoice | null) => (inv && inv.status !== 'paid' ? inv.totalCents - inv.paidCents : 0);
+  const total = rows.reduce((sum, r) => sum + due(r.invoice), 0);
+
+  return (
+    <>
+      <section className="card" aria-labelledby="h-all" style={{ gap: 6 }}>
+        <span id="h-all" className="small muted">A pagar nas próximas faturas · {cards.length} cartões</span>
+        <span className="stat-value">{money(total)}</span>
+      </section>
+      <section className="grid" style={{ ['--min' as string]: '240px' }} aria-label="Fatura de cada cartão">
+        {rows.map(({ card, invoice }) => (
+          <article key={card.id} className="card" style={{ gap: 10 }}>
+            <div className="between">
+              <h3 style={{ fontSize: 16 }}>
+                {card.name}
+                {card.last4 && <span className="muted mono small"> ••{card.last4}</span>}
+              </h3>
+              {invoice && invoiceBadge(invoice)}
+            </div>
+            {invoice ? (
+              <>
+                <span className="stat-value" style={{ fontSize: 22 }}>{money(invoice.totalCents - invoice.paidCents)}</span>
+                <span className="small muted">
+                  Fatura de {monthLabel(invoice.refMonth).toLowerCase()} · vence {isoToBr(invoice.dueDate)}
+                </span>
+              </>
+            ) : (
+              <span className="small muted">Nenhuma fatura ainda.</span>
+            )}
+            <button type="button" className="btn small" style={{ alignSelf: 'flex-start' }} onClick={() => onOpen(card.id)}>
+              Ver fatura
+            </button>
+          </article>
+        ))}
+      </section>
+    </>
+  );
 }
 
 export function InvoicesScreen() {
@@ -26,11 +78,13 @@ export function InvoicesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!cardId && cards[0]) setCardId(cards[0].id);
+    // Com mais de um cartão, abre na visão "Todos"; com um só, direto na fatura dele.
+    if (!cardId && cards.length) setCardId(cards.length > 1 ? ALL : cards[0]!.id);
   }, [cards, cardId]);
   const card = cards.find((c) => c.id === cardId);
+  const showAll = cardId === ALL;
 
-  const invoices = useInvoices(cardId || undefined);
+  const invoices = useInvoices(card ? cardId : undefined);
   useEffect(() => {
     const list = invoices.data ?? [];
     if (list.length && !list.some((i) => i.refMonth.slice(0, 7) === month)) {
@@ -43,7 +97,7 @@ export function InvoicesScreen() {
   const detail = useQuery({
     queryKey: ['invoice', cardId, month],
     queryFn: () => api<{ invoice: InvoiceDetail }>(`/wallets/${cardId}/invoices/${month}`).then((r) => r.invoice),
-    enabled: Boolean(cardId && month),
+    enabled: Boolean(card && month),
   });
 
   const refresh = () => void queryClient.invalidateQueries();
@@ -80,12 +134,21 @@ export function InvoicesScreen() {
     <>
       <PageHeader eyebrow="Cartões de crédito" title="Faturas">
         <select className="select" style={{ width: 'auto' }} value={cardId} onChange={(e) => { setCardId(e.target.value); setMonth(''); }} aria-label="Cartão">
+          {cards.length > 1 && <option value={ALL}>Todos os cartões</option>}
           {cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </PageHeader>
       <ErrorAlert error={error} />
 
-      {!invoices.data?.length ? (
+      {showAll ? (
+        <AllCardsSummary
+          cards={cards}
+          onOpen={(id) => {
+            setCardId(id);
+            setMonth('');
+          }}
+        />
+      ) : !invoices.data?.length ? (
         <Empty title="Nenhuma fatura ainda">
           <span className="small">As faturas aparecem quando você lança uma compra neste cartão.</span>
         </Empty>
@@ -107,7 +170,7 @@ export function InvoicesScreen() {
         </div>
       )}
 
-      {d && (
+      {!showAll && d && (
         <section className="card">
           <div className="between">
             <div className="stack-sm" style={{ gap: 2 }}>

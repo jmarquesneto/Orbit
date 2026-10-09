@@ -1,20 +1,27 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { RequestContext } from '../../../shared/application/ports.js';
 import { ReqContext } from '../../../shared/presentation/request-context.js';
 import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe.js';
+import { AccountService } from '../application/account.service.js';
 import { LoginUseCase } from '../application/login.use-case.js';
 import { MfaService } from '../application/mfa.service.js';
 import { SessionService } from '../application/session.service.js';
 import { PasswordInputSchema } from '../domain/password-policy.js';
-import type { AuthUser } from '../domain/user.js';
+import { type AuthUser, PersonNameSchema } from '../domain/user.js';
 import { AuthCookies } from './auth-cookies.js';
-import { AllowWithoutMfa, CurrentUser, Public } from './decorators.js';
+import { AllowDuringSetup, CurrentUser, Public } from './decorators.js';
 
 const MfaVerifySchema = z.strictObject({
   challenge: z.string().max(128),
   code: z.string().trim().min(6).max(32),
+});
+
+const ProfileSchema = z.strictObject({ name: PersonNameSchema });
+const ChangePasswordSchema = z.strictObject({
+  currentPassword: PasswordInputSchema,
+  newPassword: PasswordInputSchema,
 });
 
 const LoginSchema = z.strictObject({
@@ -29,6 +36,7 @@ export class AuthController {
     private readonly sessions: SessionService,
     private readonly cookies: AuthCookies,
     private readonly mfa: MfaService,
+    private readonly account: AccountService,
   ) {}
 
   @Public()
@@ -77,7 +85,7 @@ export class AuthController {
     }
   }
 
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Post('logout')
   @HttpCode(204)
   async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
@@ -85,15 +93,40 @@ export class AuthController {
     this.cookies.clear(res);
   }
 
-  @AllowWithoutMfa()
+  @AllowDuringSetup()
   @Get('me')
   async me(@CurrentUser() user: AuthUser) {
     return {
       id: user.id,
       email: user.email,
+      name: user.name,
       role: user.role,
+      mustChangePassword: user.mustChangePassword,
       mfaEnabled: user.mfaEnabled,
       mfaRequired: await this.mfa.isRequired(),
     };
+  }
+
+  /** Nome de exibição da própria conta. */
+  @AllowDuringSetup()
+  @Patch('me')
+  async updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(ProfileSchema)) body: z.infer<typeof ProfileSchema>,
+    @ReqContext() ctx: RequestContext,
+  ) {
+    return { user: await this.account.updateName(user, body.name, ctx.ip) };
+  }
+
+  /** Troca a própria senha (também usada para sair da senha provisória do admin). */
+  @AllowDuringSetup()
+  @Post('password')
+  @HttpCode(204)
+  async changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(ChangePasswordSchema)) body: z.infer<typeof ChangePasswordSchema>,
+    @ReqContext() ctx: RequestContext,
+  ) {
+    await this.account.changePassword(user, body, ctx);
   }
 }

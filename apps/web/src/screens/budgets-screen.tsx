@@ -73,6 +73,9 @@ export function BudgetsScreen() {
               <span className="small muted">
                 {b.currency} · mês começa no dia {b.periodStartDay}
               </span>
+              <span className="small" style={{ color: 'var(--accent)' }}>
+                {b.role === 'owner' || b.role === 'create' ? 'Abrir · categorias e planejado →' : 'Abrir →'}
+              </span>
             </Link>
           ))}
         </div>
