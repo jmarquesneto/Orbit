@@ -41,6 +41,13 @@ export const envSchema = z
     /** Assina cookies de sessão e o token CSRF (double-submit). */
     SESSION_SECRET: secret('SESSION_SECRET'),
 
+    /**
+     * Primeiro acesso sem terminal (ex.: NAS): se ainda não existir nenhum administrador,
+     * a API cria este com uma senha provisória mostrada no log, a trocar no 1º login.
+     */
+    BOOTSTRAP_ADMIN_EMAIL: z.preprocess((v) => (v === '' ? undefined : v), z.email().max(254).optional()),
+    BOOTSTRAP_ADMIN_NAME: z.preprocess((v) => (v === '' ? undefined : v), z.string().max(60).optional()),
+
     /** Chave AES-256-GCM (32 bytes em base64) para dados sensíveis em repouso, ex.: segredo MFA. */
     DATA_ENCRYPTION_KEY: z
       .string({ error: 'DATA_ENCRYPTION_KEY é obrigatório' })

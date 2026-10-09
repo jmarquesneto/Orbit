@@ -109,7 +109,7 @@ export function PasswordForm({ forced = false, onDone }: { forced?: boolean; onD
       <ErrorAlert error={error} />
       <SuccessAlert message={saved} />
       <label className="field">
-        {forced ? 'Senha provisória (a que o administrador passou)' : 'Senha atual'}
+        {forced ? 'Senha provisória' : 'Senha atual'}
         <input
           className="input"
           type="password"

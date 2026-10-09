@@ -22,6 +22,9 @@ Para apagar tudo, inclusive os dados: `docker compose down -v`.
 No Windows sem Git Bash, gere o `.env` com
 `powershell -ExecutionPolicy Bypass -File .\scripts\generate-env.ps1`.
 
+> **NAS com OpenMediaVault?** Siga o guia [deploy/omv/LEIA-ME.md](deploy/omv/LEIA-ME.md)
+> (stack do plugin Compose, caminhos absolutos e primeiro acesso sem terminal).
+
 ### Primeiro acesso
 
 As migrações rodam sozinhas a cada `up` (serviço `migrate`). Crie o administrador uma vez:

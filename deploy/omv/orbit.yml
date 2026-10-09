@@ -1,0 +1,177 @@
+# ---------------------------------------------------------------------------------------
+# Stack para o OpenMediaVault (Services › Compose › Files › Add).
+#
+# Diferenças em relação ao docker-compose.yml da raiz:
+#   - caminhos ABSOLUTOS: o código fica em ${ORBIT_APP_DIR} e os dados do banco em
+#     ${ORBIT_DATA_DIR}/postgres (pasta compartilhada do NAS, entra no backup do OMV);
+#   - o site escuta na rede local (WEB_BIND_ADDRESS=0.0.0.0) para abrir pelo IP do NAS;
+#   - o Redis não grava em disco: guarda só cache, limites de tentativa e desafios de
+#     login de poucos minutos. Sessões e dados financeiros ficam no PostgreSQL.
+#
+# Todas as variáveis vêm da caixa "Environment" da stack (gere com
+# scripts/generate-env.ps1 -Omv). ${VAR:?} recusa subir se algo estiver faltando.
+# ---------------------------------------------------------------------------------------
+
+x-hardening: &hardening
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  web:
+    <<: *hardening
+    build:
+      context: ${ORBIT_APP_DIR:?defina ORBIT_APP_DIR}
+      dockerfile: apps/web/Dockerfile
+    image: orbit-web:local
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    ports:
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3010}:3000"
+    networks:
+      - edge
+      - backend
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+
+  api:
+    <<: *hardening
+    build:
+      context: ${ORBIT_APP_DIR:?defina ORBIT_APP_DIR}
+      dockerfile: apps/api/Dockerfile
+    image: orbit-api:local
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEB_ORIGIN: ${WEB_ORIGIN:?defina WEB_ORIGIN}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?defina DB_NAME}
+      DB_APP_USER: ${DB_APP_USER:?defina DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?defina DB_APP_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-604800}
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?defina DATA_ENCRYPTION_KEY}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+    networks:
+      - backend
+      - data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Aplica as migrações com o papel dono do schema e encerra ("Exited" é o normal).
+  migrate:
+    <<: *hardening
+    restart: "no"
+    build:
+      context: ${ORBIT_APP_DIR:?defina ORBIT_APP_DIR}
+      dockerfile: apps/api/Dockerfile
+    image: orbit-api:local
+    command: ["node", "dist/infrastructure/database/migrate.js"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?defina DB_NAME}
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:?defina DB_MIGRATOR_USER}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?defina DB_MIGRATOR_PASSWORD}
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  db:
+    <<: *hardening
+    build:
+      context: ${ORBIT_APP_DIR:?defina ORBIT_APP_DIR}/infra/db
+    image: orbit-db:local
+    environment:
+      POSTGRES_DB: ${DB_NAME:?defina DB_NAME}
+      POSTGRES_USER: ${DB_SUPERUSER:?defina DB_SUPERUSER}
+      POSTGRES_PASSWORD: ${DB_SUPERUSER_PASSWORD:?defina DB_SUPERUSER_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:?defina DB_MIGRATOR_USER}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?defina DB_MIGRATOR_PASSWORD}
+      DB_APP_USER: ${DB_APP_USER:?defina DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?defina DB_APP_PASSWORD}
+    # O entrypoint oficial ajusta o dono da pasta de dados e troca para o usuário postgres.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    volumes:
+      # Caminho absoluto no disco do NAS. Use um disco ext4/btrfs (não NTFS/exFAT).
+      - ${ORBIT_DATA_DIR:?defina ORBIT_DATA_DIR}/postgres:/var/lib/postgresql/data
+    networks:
+      - data
+    shm_size: 128mb
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  redis:
+    <<: *hardening
+    image: redis:7.4-alpine
+    user: redis
+    command:
+      - sh
+      - -c
+      - >-
+        printf 'requirepass %s\n' "$$REDIS_PASSWORD" |
+        exec redis-server - --save "" --appendonly no --protected-mode yes
+        --rename-command FLUSHALL "" --rename-command FLUSHDB "" --rename-command DEBUG ""
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /data:uid=999,gid=1000
+
+networks:
+  edge:
+  backend:
+    internal: true
+  data:
+    internal: true

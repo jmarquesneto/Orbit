@@ -83,6 +83,38 @@ export class UsersAdminService {
   }
 
   /**
+   * Primeiro administrador sem terminal: só age se ainda NÃO existe nenhum admin. A senha é
+   * provisória (troca obrigatória no 1º login), então o log em que ela aparece perde o valor
+   * assim que a pessoa entra. Devolve null quando já havia administrador.
+   */
+  async bootstrapFirstAdmin(
+    rawEmail: string,
+    rawName?: string,
+  ): Promise<{ user: UserView; temporaryPassword: string } | null> {
+    if ((await this.users.countAdmins()) > 0) return null;
+    const email = rawEmail.trim().toLowerCase();
+    const name = rawName ? PersonNameSchema.safeParse(rawName) : null;
+    const temporaryPassword = generateTemporaryPassword();
+    const hash = await this.hasher.hash(temporaryPassword);
+    return this.tx.run(async () => {
+      if ((await this.users.countAdmins()) > 0) return null;
+      if (await this.users.findByEmail(email)) {
+        throw new ConflictError('Já existe um usuário (não administrador) com BOOTSTRAP_ADMIN_EMAIL.');
+      }
+      const user = await this.users.create({
+        email,
+        name: name?.success ? name.data : null,
+        passwordHash: hash,
+        role: 'admin',
+        at: this.clock.now(),
+      });
+      await this.users.setPassword(user.id, hash, true);
+      await this.audit.record({ actorId: null, action: 'user.bootstrap_admin', entityType: 'user', entityId: user.id });
+      return { user: toUserView({ ...user, mustChangePassword: true }), temporaryPassword };
+    });
+  }
+
+  /**
    * Cria um administrador pela linha de comando (bootstrap do primeiro acesso).
    * A senha é aleatória (256 bits) e mostrada uma única vez a quem rodou o comando.
    */

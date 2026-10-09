@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (me.data.mustChangePassword) {
     return setup(
       'Crie sua nova senha',
-      'Você entrou com uma senha provisória do administrador. Defina agora uma senha só sua.',
+      'Você entrou com uma senha provisória. Defina agora uma senha só sua.',
       <PasswordForm forced onDone={reload} />,
     );
   }

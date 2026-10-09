@@ -87,3 +87,14 @@ describe('Admin redefine a senha', () => {
     expect(new Set(Array.from({ length: 50 }, generateTemporaryPassword)).size).toBe(50);
   });
 });
+
+describe('Primeiro administrador automático (NAS)', () => {
+  it('cria com senha provisória só quando não há administrador', async () => {
+    const h = buildHarness();
+    const first = await h.usersAdmin.bootstrapFirstAdmin(' Dono@Casa.com ', 'Marina Alves');
+    expect(first?.user).toMatchObject({ email: 'dono@casa.com', name: 'Marina Alves', role: 'admin', mustChangePassword: true });
+    const r = await h.login.execute({ email: 'dono@casa.com', password: first!.temporaryPassword }, ctx);
+    expect(r.kind).toBe('session');
+    expect(await h.usersAdmin.bootstrapFirstAdmin('outro@casa.com')).toBeNull();
+  });
+});
