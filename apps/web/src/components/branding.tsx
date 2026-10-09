@@ -85,7 +85,8 @@ export function Brand({ href = '/' }: { href?: string }) {
   return (
     <a className="brand" href={href}>
       {logoUrl ? (
-        <img src={logoUrl} alt="" referrerPolicy="no-referrer" />
+        // COEP require-corp: imagem de outra origem só carrega com CORS (crossOrigin).
+        <img src={logoUrl} alt="" referrerPolicy="no-referrer" crossOrigin="anonymous" />
       ) : (
         <BrandMark />
       )}

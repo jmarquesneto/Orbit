@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { decideTransport, HSTS_VALUE } from './lib/transport';
 
 /**
  * Content-Security-Policy com nonce por requisição: só scripts emitidos pelo próprio Next
@@ -6,6 +7,19 @@ import { type NextRequest, NextResponse } from 'next/server';
  * Estilos inline são permitidos porque a cor de destaque é uma variável CSS dinâmica.
  */
 export function middleware(request: NextRequest) {
+  // HTTP → HTTPS (quando FORCE_HTTPS=true e o proxy informa que a conexão veio em HTTP).
+  const transport = decideTransport({
+    url: request.url,
+    forwardedProto: request.headers.get('x-forwarded-proto'),
+    forwardedHost: request.headers.get('x-forwarded-host') ?? request.headers.get('host'),
+    forceHttps: process.env.FORCE_HTTPS === 'true',
+  });
+  if (transport.redirectTo) {
+    // 301 para navegação; 308 preserva método e corpo de um POST que chegou em HTTP.
+    const status = request.method === 'GET' || request.method === 'HEAD' ? 301 : 308;
+    return NextResponse.redirect(transport.redirectTo, status);
+  }
+
   const nonce = btoa(crypto.randomUUID()); // runtime edge: sem Buffer
   const dev = process.env.NODE_ENV === 'development';
   const csp = [
@@ -27,6 +41,7 @@ export function middleware(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers } });
   response.headers.set('Content-Security-Policy', csp);
+  if (transport.sendHsts) response.headers.set('Strict-Transport-Security', HSTS_VALUE);
   return response;
 }
 

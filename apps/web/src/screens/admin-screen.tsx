@@ -119,6 +119,10 @@ function Identity() {
         <label className="field">
           Endereço do logotipo (https, opcional)
           <input className="input" type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." />
+          <span className="xsmall muted">
+            Por segurança (isolamento entre origens), o servidor da imagem precisa permitir CORS
+            (Access-Control-Allow-Origin). Se o logo não aparecer, hospede-o em outro serviço.
+          </span>
         </label>
         <SuccessAlert message={saved} />
         <ErrorAlert error={error} />

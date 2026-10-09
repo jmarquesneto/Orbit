@@ -33,6 +33,7 @@ services:
     image: ${COMPOSE_PROJECT_NAME:-finance}-web:local
     environment:
       API_INTERNAL_URL: http://api:4000
+      FORCE_HTTPS: ${FORCE_HTTPS:-false}
     ports:
       - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3010}:3000"
     networks:

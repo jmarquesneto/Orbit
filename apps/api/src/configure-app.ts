@@ -14,6 +14,11 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
       // A API só devolve JSON: nada pode ser renderizado, embutido ou executado.
       contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
       crossOriginResourcePolicy: { policy: 'same-origin' },
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
+      crossOriginOpenerPolicy: { policy: 'same-origin' },
+      // HSTS só em HTTPS: quem decide é o frontend (middleware) ou o proxy com TLS. A API
+      // fica na rede interna e as respostas dela passariam também por HTTP.
+      strictTransportSecurity: false,
     }),
   );
   app.use(cookieParser());

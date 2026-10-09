@@ -28,6 +28,24 @@ banco; os dois aparecem como **parados (Exited)** — é o normal. Tudo fica na 
 As imagens prontas (`ghcr.io/jmarquesneto/orbit-web`, `-api`, `-db`, para amd64 e arm64) são
 publicadas pelo GitHub Actions a cada atualização do código.
 
+### Publicar com domínio e HTTPS
+
+O contêiner `web` serve HTTP; o HTTPS fica num proxy reverso na frente (Nginx, Nginx Proxy
+Manager, Cloudflare…), que precisa enviar `X-Forwarded-Proto`.
+
+- **HSTS só em HTTPS:** o app envia `Strict-Transport-Security` apenas quando o proxy informa
+  `X-Forwarded-Proto: https` (nunca em HTTP, conforme a RFC 6797).
+- **HTTP → HTTPS:** ligue `FORCE_HTTPS: "true"` no serviço `web` para redirecionar (301; 308 em
+  POST) quem chegar por `http://seu-dominio`. Acessos por IP, `localhost` ou `.local` continuam
+  em HTTP na rede de casa.
+- **Isolamento entre origens:** todas as respostas levam `Cross-Origin-Embedder-Policy:
+  require-corp`, `Cross-Origin-Opener-Policy: same-origin` e `Cross-Origin-Resource-Policy:
+  same-origin`. Consequência: um logotipo hospedado em outro domínio só aparece se o servidor
+  dele permitir CORS.
+- **Nginx pronto:** [`deploy/nginx/vesta.conf`](deploy/nginx/vesta.conf) — porta 80 só com 301
+  (e o desafio do Let's Encrypt), porta 443 com TLS, HSTS e os três cabeçalhos (sem duplicar os do
+  app), e o canal SSE sem buffer. Ajuste domínio, certificados e o endereço do contêiner `web`.
+
 ## Subindo o ambiente (desenvolvimento, com o código)
 
 Pré-requisitos: Docker com Compose v2 e `openssl`.

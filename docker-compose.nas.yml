@@ -49,6 +49,10 @@ services:
       - "3010:3000"   # <<< ALTERE só o número da esquerda se a porta 3010 estiver ocupada
     environment:
       API_INTERNAL_URL: http://api:4000
+      # "true" quando o site for publicado por um domínio com HTTPS (proxy na frente):
+      # quem abrir por http://seu-dominio é levado ao https. Acesso por IP na rede de
+      # casa (http://IP:3010) continua funcionando.
+      FORCE_HTTPS: "false"
     networks: [site, interna]
     depends_on:
       api:

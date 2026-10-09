@@ -6,7 +6,11 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  // Isolamento entre origens: nenhuma outra origem embute, abre ou lê os recursos do site.
+  { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+  // Strict-Transport-Security NÃO fica aqui: só pode ir em respostas HTTPS (middleware.ts).
 ];
 
 const nextConfig: NextConfig = {
