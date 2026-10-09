@@ -64,6 +64,20 @@
       "when": 1791506130121,
       "tag": "0008_user_name_and_password_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791549938642,
+      "tag": "0009_maintenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791549940074,
+      "tag": "0010_maintenance_policies",
+      "breakpoints": true
     }
   ]
 }

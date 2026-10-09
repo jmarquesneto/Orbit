@@ -515,3 +515,96 @@ export const transfers = pgTable(
     check('transfers_distinct_wallets', sql`${t.fromWalletId} <> ${t.toWalletId}`),
   ],
 );
+
+// ---------------------------------------------------------- Manutenção residencial
+
+export const maintenanceFrequency = pgEnum('maintenance_frequency', [
+  'once',
+  'weekly',
+  'monthly',
+  'quarterly',
+  'semiannual',
+  'annual',
+]);
+
+/** Item da casa que recebe manutenção. Herda o acesso do orçamento (quem vê e onde caem os custos). */
+export const equipment = pgTable(
+  'equipment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    budgetId: uuid('budget_id')
+      .notNull()
+      .references(() => budgets.id),
+    name: text('name').notNull(),
+    location: text('location').notNull(),
+    /** Manual ou vídeo do fabricante; só https. */
+    manualUrl: text('manual_url'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    archivedAt: timestamptz('archived_at'),
+  },
+  (t) => [
+    index('equipment_budget_idx').on(t.budgetId),
+    check('equipment_manual_https', sql`${t.manualUrl} IS NULL OR ${t.manualUrl} LIKE 'https://%'`),
+  ],
+);
+
+export const maintenanceTasks = pgTable(
+  'maintenance_tasks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    equipmentId: uuid('equipment_id')
+      .notNull()
+      .references(() => equipment.id),
+    name: text('name').notNull(),
+    frequency: maintenanceFrequency('frequency').notNull(),
+    assigneeId: uuid('assignee_id')
+      .notNull()
+      .references(() => users.id),
+    /** Próximo vencimento: data real da última conclusão + intervalo. NULL = encerrada. */
+    nextDueOn: calendarDate('next_due_on'),
+    lastDoneOn: calendarDate('last_done_on'),
+    active: boolean('active').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    version: integer('version').notNull().default(1),
+  },
+  (t) => [
+    index('maintenance_tasks_assignee_due_idx').on(t.assigneeId, t.nextDueOn),
+    index('maintenance_tasks_equipment_idx').on(t.equipmentId),
+  ],
+);
+
+/** Histórico imutável: só INSERT (um gatilho bloqueia alterações e exclusões). */
+export const maintenanceLogs = pgTable(
+  'maintenance_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => maintenanceTasks.id),
+    equipmentId: uuid('equipment_id')
+      .notNull()
+      .references(() => equipment.id),
+    /** Cópia do nome: renomear a tarefa não reescreve o passado. */
+    taskName: text('task_name').notNull(),
+    completedBy: uuid('completed_by')
+      .notNull()
+      .references(() => users.id),
+    completedOn: calendarDate('completed_on').notNull(),
+    dueOn: calendarDate('due_on'),
+    nextDueOn: calendarDate('next_due_on'),
+    transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
+    note: text('note'),
+    idempotencyKey: uuid('idempotency_key').notNull().unique(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('maintenance_logs_equipment_idx').on(t.equipmentId, t.completedOn),
+    index('maintenance_logs_completed_idx').on(t.completedOn),
+  ],
+);

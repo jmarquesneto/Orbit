@@ -54,6 +54,23 @@ export function parseYearMonth(value: string): YearMonth {
   return ym;
 }
 
-export function todayIso(now: Date): IsoDate {
-  return now.toISOString().slice(0, 10);
+/**
+ * Data civil de "hoje" no fuso da casa (APP_TIMEZONE, padrão America/Sao_Paulo). Em UTC,
+ * depois das 21h no Brasil já seria o dia seguinte — e uma conta venceria um dia antes.
+ */
+export function todayIso(now: Date, timeZone = process.env.APP_TIMEZONE || 'America/Sao_Paulo'): IsoDate {
+  // en-CA formata como AAAA-MM-DD; os dados de fuso vêm do ICU embutido no Node.
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+/** Soma dias a uma data civil (sem fuso). */
+export function addDays(date: IsoDate, days: number): IsoDate {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Dias de `from` até `to` (negativo se `to` for antes). */
+export function daysBetween(from: IsoDate, to: IsoDate): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
