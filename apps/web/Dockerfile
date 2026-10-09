@@ -4,7 +4,10 @@
 ARG NODE_IMAGE=node:22-alpine
 
 # ---------- base ----------
-FROM ${NODE_IMAGE} AS base
+# Dependências e build rodam na arquitetura da MÁQUINA que constrói ($BUILDPLATFORM): a
+# saída do Next.js é JavaScript, igual para amd64 e arm64. Assim a imagem arm64 não precisa
+# compilar dentro de um emulador (lento e instável). Só o estágio final é da arquitetura alvo.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=true \
@@ -43,6 +46,9 @@ WORKDIR /app
 COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /repo/apps/web/public ./apps/web/public
+# "sharp" (otimização de imagens do Next) é nativo e viria da arquitetura do build; o sistema
+# não usa next/image (images.unoptimized), então os binários saem da imagem.
+RUN rm -rf /app/node_modules/.pnpm/@img+sharp* /app/node_modules/sharp
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \

@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../../'),
   poweredByHeader: false,
+  // Sem otimização de imagens no servidor (e sem o módulo nativo "sharp"): a imagem
+  // Docker fica igual para amd64 e arm64.
+  images: { unoptimized: true },
   reactStrictMode: true,
   // O navegador só conversa com o frontend (mesma origem → cookies SameSite=Strict funcionam).
   // /api/* é repassado à API pela rede interna, com X-Forwarded-For para o rate limit.
