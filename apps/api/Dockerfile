@@ -4,7 +4,10 @@
 ARG NODE_IMAGE=node:22-alpine
 
 # ---------- base: pnpm via corepack ----------
-FROM ${NODE_IMAGE} AS base
+# A compilação (TypeScript → JS) roda na arquitetura da MÁQUINA que constrói
+# ($BUILDPLATFORM): rápida e sem emulador. Só a instalação das dependências de produção
+# (que têm binários nativos, ex.: argon2) roda na arquitetura alvo.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=true
@@ -18,11 +21,22 @@ COPY apps/api/package.json apps/api/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @app/api...
 
-# ---------- build: compila e isola só as dependências de produção ----------
+# ---------- build: compila (JavaScript igual para amd64 e arm64) ----------
 FROM deps AS build
 COPY apps/api apps/api
-RUN pnpm --filter @app/api build \
- && pnpm --filter @app/api deploy --prod --legacy /out
+RUN pnpm --filter @app/api build
+
+# ---------- prod-deps: dependências de produção na arquitetura ALVO ----------
+FROM ${NODE_IMAGE} AS prod-deps
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    CI=true
+RUN corepack enable
+WORKDIR /repo
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+RUN --mount=type=cache,id=pnpm-store-target,target=/pnpm/store \
+    pnpm --filter @app/api deploy --prod --legacy /out
 
 # ---------- runtime: imagem mínima, sem gerenciadores de pacote, usuário não-root ----------
 FROM ${NODE_IMAGE} AS runtime
@@ -35,10 +49,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
            /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app
 # Arquivos pertencem ao root e são só-leitura para o usuário "node".
-COPY --from=build /out/package.json ./package.json
-COPY --from=build /out/node_modules ./node_modules
-COPY --from=build /out/dist ./dist
-COPY --from=build /out/drizzle ./drizzle
+COPY --from=prod-deps /out/package.json ./package.json
+COPY --from=prod-deps /out/node_modules ./node_modules
+COPY --from=build /repo/apps/api/dist ./dist
+COPY --from=build /repo/apps/api/drizzle ./drizzle
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
