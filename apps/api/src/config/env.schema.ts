@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { withSecretFiles } from './secret-files.js';
 
 /**
  * Um segredo precisa ter ao menos 256 bits de entropia (32 bytes → 43+ chars em base64)
@@ -21,7 +22,11 @@ export const envSchema = z
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
     /** Origem pública do frontend — usada em CORS e na checagem de Origin (CSRF). */
-    WEB_ORIGIN: z.url(),
+    /**
+     * Opcional: o site aceita ser aberto por qualquer endereço do próprio servidor (o proxy
+     * do frontend informa qual), e os links de convite usam o endereço do navegador.
+     */
+    WEB_ORIGIN: z.url().default('http://localhost:3010'),
 
     DB_HOST: z.string().min(1),
     DB_PORT: port.default(5432),
@@ -74,7 +79,7 @@ export type Env = z.infer<typeof envSchema>;
 
 /** Valida o ambiente uma única vez no boot. Falha rápido, sem vazar os valores no erro. */
 export function parseEnv(source: NodeJS.ProcessEnv): Env {
-  const result = envSchema.safeParse(source);
+  const result = envSchema.safeParse(withSecretFiles(source));
   if (!result.success) {
     const problems = result.error.issues
       .map((i) => `  - ${i.path.join('.') || 'env'}: ${i.message}`)

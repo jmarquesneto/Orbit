@@ -138,6 +138,10 @@ export class InMemoryUsers implements UserRepository {
     const u = this.rows.get(id);
     if (u) this.rows.set(id, { ...u, mfaLastStep: step });
   }
+  async countAll() {
+    return this.rows.size;
+  }
+  async lockUserCreation() {}
   async countAdmins() {
     return [...this.rows.values()].filter((u) => u.role === 'admin').length;
   }

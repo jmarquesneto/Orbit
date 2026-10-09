@@ -6,6 +6,13 @@
 # As senhas são lidas do ambiente com \getenv (nunca passam por argv nem pelo shell).
 set -eu
 
+# Instalação em NAS: as senhas vêm dos arquivos gerados na 1ª subida (SECRETS_DIR).
+if [ -n "${SECRETS_DIR:-}" ]; then
+  : "${DB_MIGRATOR_PASSWORD:=$(cat "$SECRETS_DIR/db_migrator_password")}"
+  : "${DB_APP_PASSWORD:=$(cat "$SECRETS_DIR/db_app_password")}"
+  export DB_MIGRATOR_PASSWORD DB_APP_PASSWORD
+fi
+
 : "${DB_MIGRATOR_USER:?DB_MIGRATOR_USER não definido}"
 : "${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD não definido}"
 : "${DB_APP_USER:?DB_APP_USER não definido}"

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { asc, count, eq } from 'drizzle-orm';
+import { asc, count, eq, sql } from 'drizzle-orm';
 import { DbContext } from '../../../infrastructure/database/db-context.js';
 import { users } from '../../../infrastructure/database/schema.js';
 import type { UserRecord, UserStatus } from '../domain/user.js';
@@ -89,5 +89,15 @@ export class DrizzleUserRepository implements UserRepository {
   async countAdmins(): Promise<number> {
     const [row] = await this.ctx.db.select({ n: count() }).from(users).where(eq(users.role, 'admin'));
     return row?.n ?? 0;
+  }
+
+  async countAll(): Promise<number> {
+    const [row] = await this.ctx.db.select({ n: count() }).from(users);
+    return row?.n ?? 0;
+  }
+
+  async lockUserCreation(): Promise<void> {
+    // Chave fixa do advisory lock: só uma "configuração inicial" por vez.
+    await this.ctx.db.execute(sql`SELECT pg_advisory_xact_lock(7340001)`);
   }
 }

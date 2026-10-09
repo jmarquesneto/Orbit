@@ -52,10 +52,7 @@ export class OriginCheckMiddleware implements NestMiddleware {
     if (forwardedHost && origin.host.toLowerCase() === forwardedHost) {
       if (!this.warned) {
         this.warned = true;
-        this.logger.warn(
-          `O site está sendo acessado por ${origin.origin}, mas WEB_ORIGIN=${this.allowed}. ` +
-            'Ajuste WEB_ORIGIN no .env para os links de convite apontarem para o endereço certo.',
-        );
+        this.logger.log(`Site acessado por ${origin.origin} (WEB_ORIGIN=${this.allowed}).`);
       }
       return next();
     }

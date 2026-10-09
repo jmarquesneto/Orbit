@@ -6,9 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
+import { withSecretFiles } from '../../config/secret-files.js';
+
+const env = withSecretFiles(process.env);
 
 function required(name: string): string {
-  const value = process.env[name];
+  const value = env[name];
   if (!value) throw new Error(`${name} não definida`);
   return value;
 }
@@ -16,7 +19,7 @@ function required(name: string): string {
 async function main(): Promise<void> {
   const pool = new Pool({
     host: required('DB_HOST'),
-    port: Number(process.env.DB_PORT ?? 5432),
+    port: Number(env.DB_PORT ?? 5432),
     database: required('DB_NAME'),
     user: required('DB_MIGRATOR_USER'),
     password: required('DB_MIGRATOR_PASSWORD'),

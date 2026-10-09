@@ -15,4 +15,3 @@ infra
 scripts
 docker-compose*.yml
 README.md
-deploy

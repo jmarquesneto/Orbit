@@ -2,11 +2,11 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Brand, useBranding } from '@/components/branding';
 import { CodeField, codeFrom } from '@/components/mfa';
 import { ErrorAlert } from '@/components/ui';
-import { ApiError, errorMessage, post } from '@/lib/api';
+import { api, ApiError, errorMessage, post } from '@/lib/api';
 
 /** Só aceita voltar para um caminho interno (evita redirecionamento aberto). */
 function safeNext(next: string | null): string {
@@ -23,6 +23,13 @@ export function LoginScreen() {
   /** Senha certa numa conta com MFA: o servidor devolve um desafio de 5 minutos. */
   const [challenge, setChallenge] = useState<string | null>(null);
   const [useRecovery, setUseRecovery] = useState(false);
+
+  // Sistema recém-instalado (nenhuma conta ainda): vai para a criação do administrador.
+  useEffect(() => {
+    api<{ needed: boolean }>('/setup')
+      .then((r) => r.needed && router.replace('/primeiro-acesso'))
+      .catch(() => undefined);
+  }, [router]);
 
   function enter() {
     queryClient.clear();

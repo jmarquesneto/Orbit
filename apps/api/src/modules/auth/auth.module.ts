@@ -5,6 +5,7 @@ import type { Env } from '../../config/env.schema.js';
 import { SettingsModule } from '../settings/settings.module.js';
 import { AccountService } from './application/account.service.js';
 import { BootstrapAdminService } from './application/bootstrap-admin.service.js';
+import { SetupService } from './application/setup.service.js';
 import { LoginUseCase } from './application/login.use-case.js';
 import { MfaService } from './application/mfa.service.js';
 import {
@@ -32,10 +33,11 @@ import { AuthCookies } from './presentation/auth-cookies.js';
 import { AuthController } from './presentation/auth.controller.js';
 import { JwtAuthGuard, MfaGuard, RolesGuard } from './presentation/guards.js';
 import { MfaController } from './presentation/mfa.controller.js';
+import { SetupController } from './presentation/setup.controller.js';
 
 @Module({
   imports: [SettingsModule],
-  controllers: [AuthController, MfaController, AdminUsersController],
+  controllers: [AuthController, MfaController, AdminUsersController, SetupController],
   providers: [
     { provide: USER_REPOSITORY, useClass: DrizzleUserRepository },
     { provide: SESSION_REPOSITORY, useClass: DrizzleSessionRepository },
@@ -56,6 +58,7 @@ import { MfaController } from './presentation/mfa.controller.js';
     LoginUseCase,
     AccountService,
     BootstrapAdminService,
+    SetupService,
     MfaService,
     UsersAdminService,
     AuthCookies,

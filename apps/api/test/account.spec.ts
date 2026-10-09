@@ -98,3 +98,23 @@ describe('Primeiro administrador automático (NAS)', () => {
     expect(await h.usersAdmin.bootstrapFirstAdmin('outro@casa.com')).toBeNull();
   });
 });
+
+describe('Configuração inicial (criar administrador)', () => {
+  const input = { name: 'Marina Alves', email: 'Marina@Casa.com', password: 'uma frase longa de senha 9' };
+
+  it('só funciona enquanto não existe nenhuma conta', async () => {
+    const h = buildHarness();
+    expect(await h.setup.isNeeded()).toBe(true);
+    const { user, session } = await h.setup.createFirstAdmin(input, ctx);
+    expect(user).toMatchObject({ email: 'marina@casa.com', name: 'Marina Alves', role: 'admin' });
+    expect(session.accessToken).toBeTruthy();
+    expect(await h.setup.isNeeded()).toBe(false);
+    await expect(h.setup.createFirstAdmin({ ...input, email: 'outro@casa.com' }, ctx)).rejects.toThrow(/já foi configurado/);
+  });
+
+  it('recusa senha fraca', async () => {
+    const h = buildHarness();
+    await expect(h.setup.createFirstAdmin({ ...input, password: 'curta' }, ctx)).rejects.toBeInstanceOf(ValidationError);
+    expect(await h.setup.isNeeded()).toBe(true);
+  });
+});

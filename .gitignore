@@ -22,5 +22,3 @@ npm-debug.log*
 pnpm-debug.log*
 next-env.d.ts
 
-# Configuração gerada para o OpenMediaVault (contém senhas)
-deploy/omv/orbit-pronto.yml

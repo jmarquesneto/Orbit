@@ -4,7 +4,31 @@ Monorepo TypeScript com frontend **Next.js 15**, API **NestJS 12** (Node 22), **
 **Redis 7**, tudo em Docker. O nome exibido na interface **não está no código**: ele vem da tabela
 `system_settings` (chave `app.name`) e pode ser trocado no painel administrativo.
 
-## Subindo o ambiente
+## Instalar num NAS ou servidor (Portainer / OpenMediaVault)
+
+Sem baixar código e sem gerar senhas:
+
+1. Abra o arquivo [`docker-compose.nas.yml`](docker-compose.nas.yml) e copie tudo.
+2. **Portainer:** *Stacks › Add stack › Web editor* e cole.
+   **OpenMediaVault:** *Serviços › Compose › Arquivos › Adicionar* e cole no campo *Arquivo*.
+3. Altere as linhas marcadas com `<<< ALTERE`:
+   - a **pasta dos dados**, com o caminho absoluto no disco
+     (ex.: `/srv/dev-disk-by-uuid-25f3c92f-.../DOCKER_APPS/orbit`);
+   - a **porta**, se a `3010` já estiver em uso.
+4. *Deploy the stack* (Portainer) ou *Up* (OMV) e aguarde baixar as imagens.
+5. Abra `http://IP-DO-SERVIDOR:3010`, crie a conta de administrador e ative o app
+   autenticador no celular.
+
+O contêiner `segredos` gera as senhas internas na primeira subida e o `migrate` prepara o
+banco; os dois aparecem como **parados (Exited)** — é o normal. Tudo fica na pasta de dados:
+`postgres/` (banco) e `segredos/` (senhas internas). Faça backup da pasta inteira.
+
+**Atualizar:** Portainer › stack › *Pull and redeploy* (ou OMV › *Pull* e *Up*).
+
+As imagens prontas (`ghcr.io/jmarquesneto/orbit-web`, `-api`, `-db`, para amd64 e arm64) são
+publicadas pelo GitHub Actions a cada atualização do código.
+
+## Subindo o ambiente (desenvolvimento, com o código)
 
 Pré-requisitos: Docker com Compose v2 e `openssl`.
 
@@ -21,9 +45,6 @@ Para apagar tudo, inclusive os dados: `docker compose down -v`.
 
 No Windows sem Git Bash, gere o `.env` com
 `powershell -ExecutionPolicy Bypass -File .\scripts\generate-env.ps1`.
-
-> **NAS com OpenMediaVault?** Siga o guia [deploy/omv/LEIA-ME.md](deploy/omv/LEIA-ME.md)
-> (stack do plugin Compose, caminhos absolutos e primeiro acesso sem terminal).
 
 ### Primeiro acesso
 

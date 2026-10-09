@@ -21,6 +21,9 @@ export interface UserRepository {
   setMfaLastStep(id: string, step: number): Promise<void>;
   list(): Promise<UserRecord[]>;
   countAdmins(): Promise<number>;
+  countAll(): Promise<number>;
+  /** Trava a criação de contas até o fim da transação (duas configurações iniciais simultâneas). */
+  lockUserCreation(): Promise<void>;
 }
 export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 

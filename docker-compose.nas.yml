@@ -1,0 +1,178 @@
+# =======================================================================================
+#  Orbit — instalação em NAS / servidor (Portainer › Stacks › Add stack, ou
+#  OpenMediaVault › Compose › Arquivos › Adicionar). Copie este arquivo inteiro.
+#
+#  Altere só o que está marcado com  <<< ALTERE :
+#    1. a pasta onde os dados ficam (caminho absoluto no disco do servidor);
+#    2. a porta do site, se a 3010 já estiver em uso.
+#
+#  Depois do deploy, abra  http://IP-DO-SERVIDOR:3010  e crie a conta de administrador.
+#  Senhas internas e chaves de criptografia são geradas sozinhas na 1ª subida, dentro da
+#  pasta de dados (subpasta "segredos"). Faça backup da pasta inteira.
+# =======================================================================================
+
+x-pasta-dados: &pasta /srv/dev-disk-by-uuid-SEU-DISCO/docker_app/orbit   # <<< ALTERE
+
+x-dados: &dados
+  type: bind
+  source: *pasta
+  target: /orbit
+  bind:
+    create_host_path: true
+
+x-dados-leitura: &dados-leitura
+  type: bind
+  source: *pasta
+  target: /orbit
+  read_only: true
+  bind:
+    create_host_path: true
+
+x-seguranca: &seguranca
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  web:
+    <<: *seguranca
+    image: ghcr.io/jmarquesneto/orbit-web:latest
+    ports:
+      - "3010:3000"   # <<< ALTERE só o número da esquerda se a porta 3010 estiver ocupada
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    networks: [site, interna]
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+
+  api:
+    <<: *seguranca
+    image: ghcr.io/jmarquesneto/orbit-api:latest
+    environment:
+      SECRETS_DIR: /orbit/segredos
+      DB_HOST: db
+      DB_NAME: orbit
+      DB_APP_USER: app_runtime
+      REDIS_HOST: redis
+    volumes:
+      - *dados-leitura
+    networks: [interna, dados]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Prepara/atualiza o banco e para sozinho ("Exited" é o normal).
+  migrate:
+    <<: *seguranca
+    image: ghcr.io/jmarquesneto/orbit-api:latest
+    restart: "no"
+    command: ["node", "dist/infrastructure/database/migrate.js"]
+    environment:
+      SECRETS_DIR: /orbit/segredos
+      DB_HOST: db
+      DB_NAME: orbit
+      DB_MIGRATOR_USER: app_migrator
+    volumes:
+      - *dados-leitura
+    networks: [dados]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Gera as senhas internas na 1ª subida (não sobrescreve) e para sozinho.
+  segredos:
+    <<: *seguranca
+    image: ghcr.io/jmarquesneto/orbit-api:latest
+    restart: "no"
+    user: "0:0"
+    command: ["node", "dist/cli/init-secrets.js", "/orbit/segredos"]
+    volumes:
+      - *dados
+    network_mode: none
+    healthcheck:
+      disable: true
+    read_only: true
+
+  db:
+    <<: *seguranca
+    image: ghcr.io/jmarquesneto/orbit-db:latest
+    environment:
+      PGDATA: /orbit/postgres
+      SECRETS_DIR: /orbit/segredos
+      POSTGRES_DB: orbit
+      POSTGRES_USER: db_admin
+      POSTGRES_PASSWORD_FILE: /orbit/segredos/db_superuser_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+      DB_MIGRATOR_USER: app_migrator
+      DB_APP_USER: app_runtime
+    volumes:
+      - *dados
+    # O PostgreSQL ajusta o dono da pasta do banco ao iniciar.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    networks: [dados]
+    depends_on:
+      segredos:
+        condition: service_completed_successfully
+    shm_size: 128mb
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  # Só cache e limites de tentativa: não grava nada em disco.
+  redis:
+    <<: *seguranca
+    image: redis:7.4-alpine
+    user: redis
+    command:
+      - sh
+      - -c
+      - >-
+        printf 'requirepass %s\n' "$$(cat /orbit/segredos/redis_password)" |
+        exec redis-server - --save "" --appendonly no --protected-mode yes
+        --rename-command FLUSHALL "" --rename-command FLUSHDB "" --rename-command DEBUG ""
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /orbit/segredos/redis_password)\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - *dados-leitura
+    networks: [dados]
+    depends_on:
+      segredos:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /data:uid=999,gid=1000
+
+networks:
+  site:
+  interna:
+    internal: true
+  dados:
+    internal: true
