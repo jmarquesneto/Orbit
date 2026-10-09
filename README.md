@@ -240,8 +240,26 @@ datas no formato `AAAA-MM-DD`.
 | `GET /api/wallets/:id/invoices[/2026-11]` | faturas do cartão / uma fatura com as parcelas |
 | `POST /api/wallets/:id/invoices/2026-11/payment` | paga a fatura a partir de uma conta |
 | `POST · GET /api/transfers` · `DELETE /api/transfers/:id` | transferência entre contas suas (`{ fromWalletId, toWalletId, amountCents, occurredOn, description? }`) / lista / desfaz. Não conta como receita nem despesa |
+| `GET /api/maintenance/overview?assignee=&budgetId=` | painel de manutenção: atrasadas, próximos 7 dias, concluídas e gasto do mês |
+| `POST · GET /api/maintenance/equipment` · `GET · PATCH · DELETE /api/maintenance/equipment/:id` | equipamentos (com tarefas, histórico e totais); DELETE arquiva |
+| `POST /api/maintenance/equipment/:id/tasks` · `PATCH · DELETE /api/maintenance/tasks/:id` | tarefas recorrentes (única, semanal, mensal, trimestral, semestral, anual) |
+| `POST /api/maintenance/tasks/:id/complete` | `{ completedOn, version, idempotencyKey, note?, cost? }` conclui; com custo vira despesa na categoria Manutenção |
+| `GET /api/maintenance/members?budgetId=` | quem pode ser responsável (pessoas com acesso ao orçamento) |
 | `POST · GET /api/goals` · `POST /api/goals/:id/movements` | caixinhas: depósito e resgate a partir de uma carteira |
 | `POST /api/shares` · `GET /api/shares` · `DELETE /api/shares/:id` | compartilha orçamento ou caixinha por e-mail, com papel `read`, `edit` ou `create` |
+
+### Regras da manutenção residencial
+
+- **Recorrência:** o próximo vencimento é a data REAL de conclusão + o intervalo (nunca o vencimento
+  antigo). Dia inexistente vai para o fim do mês (31/01 + 1 mês = 28/02). Tarefa única encerra.
+- **Permissões herdadas do orçamento:** Leitura vê; Edição conclui e edita tarefas; Criação cadastra
+  equipamentos e tarefas. O responsável precisa ter acesso ao orçamento do equipamento.
+- **Conclusão numa transação:** confere a versão da tarefa, lança o custo (despesa paga na conta ou
+  compra à vista no cartão), grava o histórico ligado à despesa e recalcula o vencimento. Um clique
+  duplo não registra duas vezes (`idempotencyKey`).
+- **Histórico imutável:** `maintenance_logs` só aceita INSERT (RLS sem UPDATE/DELETE e um gatilho que
+  barra até o dono do schema). "Atrasada" é calculada; "hoje" usa o fuso `APP_TIMEZONE`
+  (padrão `America/Sao_Paulo`).
 
 ### Regras do motor financeiro
 

@@ -204,3 +204,80 @@ export const ROLE_LABEL: Record<Role, string> = {
 export function firstName(user: { name: string | null; email: string }): string {
   return user.name?.trim().split(/\s+/)[0] || user.email.split('@')[0] || '';
 }
+
+// ------------------------------------------------------------ manutenção residencial
+
+export type Frequency = 'once' | 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
+export type DueState = 'overdue' | 'week' | 'later';
+
+export interface Person {
+  id: string;
+  name: string;
+}
+
+export interface MaintenanceTask {
+  id: string;
+  name: string;
+  frequency: Frequency;
+  frequencyLabel: string;
+  equipment: { id: string; name: string; location: string };
+  budgetId: string;
+  assignee: Person;
+  nextDueOn: string | null;
+  lastDoneOn: string | null;
+  state: DueState | null;
+  daysUntil: number | null;
+  version: number;
+  canComplete: boolean;
+  canEdit: boolean;
+}
+
+export interface MaintenanceLog {
+  id: number;
+  taskId: string;
+  taskName: string;
+  frequencyLabel: string;
+  equipment: { id: string; name: string; location: string };
+  completedBy: Person;
+  completedOn: string;
+  dueOn: string | null;
+  nextDueOn: string | null;
+  costCents: number | null;
+  note: string | null;
+}
+
+export interface MaintenanceOverview {
+  today: string;
+  kpis: {
+    overdue: number;
+    oldestOverdueDays: number;
+    next7: number;
+    next7Until: string;
+    doneThisMonth: number;
+    costThisMonthCents: number;
+  };
+  tasks: MaintenanceTask[];
+  recentDone: MaintenanceLog[];
+  assignees: Person[];
+}
+
+export interface EquipmentSummary {
+  id: string;
+  budgetId: string;
+  name: string;
+  location: string;
+  manualUrl: string | null;
+  activeTasks: number;
+  nextDueOn: string | null;
+  nextState: DueState | null;
+}
+
+export interface EquipmentDetail {
+  today: string;
+  equipment: { id: string; budgetId: string; name: string; location: string; manualUrl: string | null };
+  permissions: Permissions;
+  members: Person[];
+  tasks: MaintenanceTask[];
+  logs: MaintenanceLog[];
+  totals: { activeTasks: number; logCount: number; costCents: number };
+}

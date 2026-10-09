@@ -19,6 +19,8 @@ const NAV: { href: string; label: string; icon: IconName; admin?: boolean }[] = 
   { href: '/faturas', label: 'Faturas', icon: 'card' },
   { href: '/caixinhas', label: 'Caixinhas', icon: 'goal' },
   { href: '/ofx', label: 'Conciliação OFX', icon: 'ofx' },
+  { href: '/manutencao', label: 'Manutenção', icon: 'wrench' },
+  { href: '/equipamentos', label: 'Equipamentos', icon: 'box' },
   { href: '/conta', label: 'Minha conta', icon: 'lock' },
   { href: '/admin', label: 'Administração', icon: 'shield', admin: true },
 ];

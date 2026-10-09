@@ -174,6 +174,7 @@ export class MaintenanceService {
       const names = await this.names([...tasks.map((t) => t.assigneeId), ...logs.map((l) => l.completedBy)]);
       for (const m of members) names.set(m.id, displayName(m));
       return {
+        today,
         equipment: this.equipmentView(eq),
         permissions: grant.can,
         members: members.map((m) => ({ id: m.id, name: displayName(m) })),

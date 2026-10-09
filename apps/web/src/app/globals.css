@@ -620,3 +620,157 @@ dialog.modal > form {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* ------------------------------------------------------------ manutenção */
+dialog.modal.wide {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+dialog.modal.wide > form {
+  gap: 18px;
+  padding: 24px;
+}
+.overline {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.btn.icon {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.choice.center {
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  font-weight: 600;
+}
+.choice.warn[aria-pressed='true'] {
+  border-color: var(--expense);
+  background: #2a2113;
+}
+.note-box {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #0f1c1b;
+  border: 1px solid #234743;
+  color: #c9efea;
+  font-size: 14px;
+}
+.cost-box {
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #4a3b22;
+  background: #17140e;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.kpi .kpi-value {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.kpi.danger {
+  background: #1e1412;
+  border-color: #5a2e26;
+  color: #ffb4a8;
+}
+.kpi.danger .kpi-value {
+  color: #ffcfc7;
+}
+.kpi.warn {
+  background: #1c1810;
+  border-color: #4a3b22;
+  color: var(--warn-fg);
+}
+.kpi.warn .kpi-value {
+  color: #fbe0b8;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--col, var(--accent));
+  border-radius: var(--radius);
+}
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #161c25;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+.task-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2a3442;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.due-overdue {
+  color: #ffb4a8;
+}
+.due-week {
+  color: var(--warn-fg);
+}
+.due-later,
+.due-none {
+  color: var(--text-2);
+}
+.eq-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.eq-item[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
