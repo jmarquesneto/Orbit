@@ -3,6 +3,8 @@
 #
 #   ghcr.io/<dono>/orbit-web   ghcr.io/<dono>/orbit-api   ghcr.io/<dono>/orbit-db
 #
+# Cada arquitetura é construída numa máquina NATIVA (amd64 e arm64, sem emulador QEMU,
+# que travava compilações) e as duas são unidas numa imagem multi-arquitetura no fim.
 # Tags: "latest" (último push nos branches abaixo) e "sha-<commit>" (versão exata).
 name: Imagens Docker
 
@@ -22,13 +24,19 @@ concurrency:
 
 jobs:
   build:
-    name: orbit-${{ matrix.image }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    name: orbit-${{ matrix.image }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        image: [web, api, db]
+        arch: [amd64, arm64]
         include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
           - image: web
             context: .
             file: apps/web/Dockerfile
@@ -46,7 +54,65 @@ jobs:
         id: name
         run: echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orbit-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.name.outputs.ref }}
+          labels: |
+            org.opencontainers.image.title=orbit-${{ matrix.image }}
+
+      # Envia só por digest (sem tag); a tag multi-arquitetura é criada no job "merge".
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.name.outputs.ref }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+      - name: Guardar o digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: orbit-${{ matrix.image }} (multi-arquitetura)
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, api, db]
+    steps:
+      - name: Nome da imagem
+        id: name
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orbit-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -62,17 +128,13 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
-          labels: |
-            org.opencontainers.image.title=orbit-${{ matrix.image }}
 
-      # amd64 (PC/NAS comum) e arm64 (Raspberry Pi e NAS ARM).
-      - uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Criar a imagem multi-arquitetura e as tags
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ steps.name.outputs.ref }}@sha256:%s ' *)
+
+      - name: Conferir
+        run: docker buildx imagetools inspect ${{ steps.name.outputs.ref }}:latest
